@@ -14,7 +14,7 @@
 
 ```bash
 # 1. Clone
-git clone https://github.com/yourusername/warmit.git
+git clone https://github.com/Givaa/warmit.git
 cd warmit
 
 # 2. Start (it will guide you through configuration)
