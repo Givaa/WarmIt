@@ -205,6 +205,26 @@ docker compose -f $COMPOSE_FILE pull redis postgres logs
 
 ---
 
+### 8. ImportError: No module named 'aioimap'
+
+**Problem:** After fixing module path issue, code fails with `no module named aioimap`
+
+**Root Cause:** Code imports `from aioimap import IMAP` but requirements.txt has `aioimaplib` (the correct package). The packages have different APIs.
+
+**Fix:** Updated email_service.py to use `aioimaplib` with its correct API
+
+**Changes:**
+1. Import: `from aioimap import IMAP` → `import aioimaplib`
+2. Connection: `async with IMAP(...)` → `imap = aioimaplib.IMAP4_SSL(...)`
+3. API calls adapted to aioimaplib's response format (`.lines` attribute)
+4. Added explicit `logout()` calls instead of context manager
+
+**File modified:** `src/warmit/services/email_service.py`
+
+**Result:** Email service now works with the correct IMAP library
+
+---
+
 ## Testing
 
 After these fixes, the following should work:

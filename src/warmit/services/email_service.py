@@ -8,7 +8,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import make_msgid, formataddr
 import aiosmtplib
-from aioimap import IMAP
+import aioimaplib
 
 
 logger = logging.getLogger(__name__)
@@ -131,37 +131,40 @@ class EmailService:
             logger.info(f"Fetching unread emails for {username}")
 
             # Connect to IMAP
-            async with IMAP(
-                host=imap_host,
-                port=imap_port,
-                use_ssl=use_ssl,
-            ) as imap:
-                await imap.login(username, password)
-                await imap.select("INBOX")
+            imap = aioimaplib.IMAP4_SSL(imap_host, imap_port) if use_ssl else aioimaplib.IMAP4(imap_host, imap_port)
+            await imap.wait_hello_from_server()
+            await imap.login(username, password)
+            await imap.select("INBOX")
 
-                # Search for unread emails
-                _, message_numbers = await imap.search("UNSEEN")
+            # Search for unread emails
+            response = await imap.search("UNSEEN")
+            message_numbers = response.lines[0].split() if response.lines and response.lines[0] else []
 
-                if not message_numbers or not message_numbers[0]:
-                    logger.info("No unread emails found")
-                    return []
+            if not message_numbers:
+                logger.info("No unread emails found")
+                await imap.logout()
+                return []
 
-                # Get message IDs
-                msg_ids = message_numbers[0].split()
-                if limit:
-                    msg_ids = msg_ids[:limit]
+            # Limit message IDs
+            msg_ids = message_numbers[:limit] if limit else message_numbers
 
-                emails = []
-                for msg_id in msg_ids:
-                    try:
-                        # Fetch email
-                        _, msg_data = await imap.fetch(msg_id, "(RFC822)")
+            emails = []
+            for msg_id in msg_ids:
+                try:
+                    # Fetch email
+                    fetch_response = await imap.fetch(msg_id.decode() if isinstance(msg_id, bytes) else msg_id, "(RFC822)")
 
-                        if msg_data and msg_data[0]:
-                            import email
-                            from email import policy
+                    if fetch_response.lines:
+                        import email
+                        from email import policy
 
-                            raw_email = msg_data[0][1]
+                        # Parse raw email from response
+                        raw_email = b''
+                        for line in fetch_response.lines:
+                            if isinstance(line, bytes):
+                                raw_email += line
+
+                        if raw_email:
                             email_message = email.message_from_bytes(
                                 raw_email, policy=policy.default
                             )
@@ -180,12 +183,13 @@ class EmailService:
 
                             emails.append(email_dict)
 
-                    except Exception as e:
-                        logger.error(f"Failed to fetch message {msg_id}: {e}")
-                        continue
+                except Exception as e:
+                    logger.error(f"Failed to fetch message {msg_id}: {e}")
+                    continue
 
-                logger.info(f"Fetched {len(emails)} unread emails")
-                return emails
+            await imap.logout()
+            logger.info(f"Fetched {len(emails)} unread emails")
+            return emails
 
         except Exception as e:
             logger.error(f"Failed to fetch emails: {e}")
@@ -237,23 +241,23 @@ class EmailService:
             True if successful, False otherwise
         """
         try:
-            async with IMAP(
-                host=imap_host,
-                port=imap_port,
-                use_ssl=use_ssl,
-            ) as imap:
-                await imap.login(username, password)
-                await imap.select("INBOX")
+            imap = aioimaplib.IMAP4_SSL(imap_host, imap_port) if use_ssl else aioimaplib.IMAP4(imap_host, imap_port)
+            await imap.wait_hello_from_server()
+            await imap.login(username, password)
+            await imap.select("INBOX")
 
-                # Search for message by ID
-                _, msg_nums = await imap.search(f'HEADER Message-ID "{message_id}"')
+            # Search for message by ID
+            response = await imap.search(f'HEADER Message-ID "{message_id}"')
+            msg_nums = response.lines[0].split() if response.lines and response.lines[0] else []
 
-                if msg_nums and msg_nums[0]:
-                    msg_id = msg_nums[0].split()[0]
-                    await imap.store(msg_id, "+FLAGS", "\\Seen")
-                    logger.info(f"Marked message {message_id} as read")
-                    return True
+            if msg_nums:
+                msg_num = msg_nums[0].decode() if isinstance(msg_nums[0], bytes) else msg_nums[0]
+                await imap.store(msg_num, "+FLAGS", "(\\Seen)")
+                logger.info(f"Marked message {message_id} as read")
+                await imap.logout()
+                return True
 
+            await imap.logout()
             return False
 
         except Exception as e:
@@ -306,14 +310,12 @@ class EmailService:
 
         # Test IMAP
         try:
-            async with IMAP(
-                host=imap_host,
-                port=imap_port,
-                use_ssl=imap_use_ssl,
-            ) as imap:
-                await imap.login(username, password)
-                results["imap"] = True
-                logger.info("IMAP connection successful")
+            imap = aioimaplib.IMAP4_SSL(imap_host, imap_port) if imap_use_ssl else aioimaplib.IMAP4(imap_host, imap_port)
+            await imap.wait_hello_from_server()
+            await imap.login(username, password)
+            await imap.logout()
+            results["imap"] = True
+            logger.info("IMAP connection successful")
         except Exception as e:
             logger.error(f"IMAP connection failed: {e}")
 
