@@ -1,6 +1,7 @@
 """Celery tasks for background processing."""
 
 from celery import Celery
+from celery.schedules import crontab
 from warmit.config import settings
 
 
@@ -33,18 +34,12 @@ celery_app.conf.update(
         # Reset daily counters at midnight
         "reset-daily-counters": {
             "task": "warmit.tasks.warming.reset_daily_counters",
-            "schedule": {
-                "hour": 0,
-                "minute": 0,
-            },
+            "schedule": crontab(hour=0, minute=0),  # Every day at midnight
         },
         # Update metrics daily at 11:59 PM
         "update-metrics": {
             "task": "warmit.tasks.warming.update_metrics",
-            "schedule": {
-                "hour": 23,
-                "minute": 59,
-            },
+            "schedule": crontab(hour=23, minute=59),  # Every day at 11:59 PM
         },
     },
 )

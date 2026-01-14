@@ -58,6 +58,11 @@ Shows:
 
 ## Notes
 
-- All scripts must be run from the project root directory
+- **Run from project root:** All scripts should be executed from the WarmIt project root directory
+  ```bash
+  cd /path/to/WarmIt
+  ./scripts/force-rebuild.sh
+  ```
 - The main `start.sh` script is in the project root for convenience
+- Scripts automatically detect their location and navigate to the correct directories
 - These utility scripts are for advanced troubleshooting and maintenance

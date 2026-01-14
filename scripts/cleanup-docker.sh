@@ -14,6 +14,10 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# Get script directory and project root
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+
 # Check disk space before
 echo "💽 Disk space BEFORE cleanup:"
 df -h / | awk 'NR==1 || /\/$/'
@@ -26,7 +30,7 @@ echo ""
 echo "======================================"
 echo "Step 1: Stop and remove WarmIt containers"
 echo "======================================"
-cd docker
+cd "$PROJECT_ROOT/docker"
 docker compose down
 echo -e "${GREEN}✅ Containers stopped and removed${NC}"
 echo ""
@@ -98,6 +102,9 @@ echo ""
 echo -e "${GREEN}✅ Cleanup complete!${NC}"
 echo ""
 echo "To rebuild WarmIt:"
+echo "  ./scripts/force-rebuild.sh"
+echo ""
+echo "Or manually:"
 echo "  cd docker"
 echo "  docker compose build --no-cache"
 echo "  docker compose up -d"
