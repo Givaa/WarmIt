@@ -233,6 +233,31 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Dozzle - Web-based log viewer
+  logs:
+    image: amir20/dozzle:latest
+    container_name: warmit-logs
+    ports:
+      - "8888:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      DOZZLE_LEVEL: info
+      DOZZLE_TAILSIZE: 300
+      DOZZLE_FILTER: "name=warmit"
+      DOZZLE_NO_ANALYTICS: "true"
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
 volumes:
   redis_data:
     driver: local

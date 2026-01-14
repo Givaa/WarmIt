@@ -17,7 +17,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Configuration
-COMPOSE_FILE="docker/docker-compose.prod.yml"
+COMPOSE_FILE="docker/docker-compose.yml"
 ENV_FILE="docker/.env"
 ENV_EXAMPLE=".env.example"
 
@@ -213,13 +213,11 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo ""
 echo -e "${BLUE}Access URLs:${NC}"
 echo "  📊 Dashboard:  http://localhost:8501"
+echo "  📝 Logs (Web): http://localhost:8888"
 echo "  🔌 API:        http://localhost:8000"
 echo "  📖 API Docs:   http://localhost:8000/docs"
 echo ""
 echo -e "${BLUE}Useful Commands:${NC}"
-echo "  View logs:           $DOCKER_COMPOSE -f $COMPOSE_FILE logs -f"
-echo "  View API logs:       $DOCKER_COMPOSE -f $COMPOSE_FILE logs -f api"
-echo "  View worker logs:    $DOCKER_COMPOSE -f $COMPOSE_FILE logs -f worker"
 echo "  Service status:      $DOCKER_COMPOSE -f $COMPOSE_FILE ps"
 echo "  Restart:             ./start.sh restart"
 echo "  Stop:                ./start.sh stop"

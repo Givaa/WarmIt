@@ -36,6 +36,7 @@ cd warmit
 
 **Access:**
 - 📊 Dashboard: http://localhost:8501
+- 📝 Logs (Web): http://localhost:8888
 - 🔌 API: http://localhost:8000
 - 📖 Docs: http://localhost:8000/docs
 
