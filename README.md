@@ -13,15 +13,26 @@
 ## 🚀 Quick Start
 
 ```bash
-# 1. Clone and configure
+# 1. Clone
 git clone https://github.com/yourusername/warmit.git
 cd warmit
-cp .env.example .env
-nano .env  # Add OPENROUTER_API_KEY or GROQ_API_KEY
 
-# 2. Start (one command!)
+# 2. Start (it will guide you through configuration)
 ./start.sh
+
+# The script will:
+# - Create docker/.env from template
+# - Prompt you to add your API key
+# - Start all services automatically
 ```
+
+**First time setup:**
+1. Run `./start.sh`
+2. Edit `docker/.env` when prompted
+3. Add your OpenRouter or Groq API key
+4. Press Enter to continue
+
+**That's it!** ✨
 
 **Access:**
 - 📊 Dashboard: http://localhost:8501

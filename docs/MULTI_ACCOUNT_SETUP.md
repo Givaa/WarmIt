@@ -1,49 +1,49 @@
 # Multi-Account Setup Guide
 
-Guida completa per configurare warming con multipli account sender e receiver.
+Complete guide for configuring warming with multiple sender and receiver accounts.
 
-## 🎯 Scenario Ideale
+## Ideal Scenario
 
-**10 Sender (da scaldare) + 10 Receiver (risponditori) = Setup Ottimale**
+**10 Senders (to warm up) + 10 Receivers (responders) = Optimal Setup**
 
-### Vantaggi
+### Advantages
 
-✅ **Distribuzione Naturale**: Email distribuite su multipli receiver
-✅ **Scalabilità**: Aggiungi sender/receiver senza limiti
-✅ **Resilienza**: Se 1 account ha problemi, gli altri continuano
-✅ **Efficienza**: Warming parallelo di multipli domini
-✅ **Realismo**: Simula organizzazione con più utenti
+**Natural Distribution**: Emails distributed across multiple receivers
+**Scalability**: Add senders/receivers without limits
+**Resilience**: If 1 account has problems, others continue
+**Efficiency**: Parallel warming of multiple domains
+**Realism**: Simulates organization with multiple users
 
 ---
 
-## 📊 Matematica del Warming
+## Warming Mathematics
 
-### Esempio: 10 Sender + 10 Receiver
+### Example: 10 Senders + 10 Receivers
 
-**Settimana 1** (5 email/giorno per sender):
+**Week 1** (5 emails/day per sender):
 ```
-10 sender × 5 email/giorno = 50 email totali/giorno
-50 email ÷ 10 receiver = ~5 email/receiver/giorno
+10 senders × 5 emails/day = 50 total emails/day
+50 emails ÷ 10 receivers = ~5 emails/receiver/day
 
-✅ Carico bilanciato automaticamente
-✅ Nessun receiver sovraccarico
-✅ Pattern naturale distribuito
-```
-
-**Settimana 4** (25 email/giorno per sender):
-```
-10 sender × 25 email/giorno = 250 email totali/giorno
-250 email ÷ 10 receiver = ~25 email/receiver/giorno
-
-✅ Ancora gestibile
-✅ Distribuzione automatica
-✅ High engagement
+Automatically balanced load
+No receiver overload
+Natural distributed pattern
 ```
 
-### Scalabilità
+**Week 4** (25 emails/day per sender):
+```
+10 senders × 25 emails/day = 250 total emails/day
+250 emails ÷ 10 receivers = ~25 emails/receiver/day
 
-| Sender | Receiver | Email/Day (Week 1) | Email/Day (Week 6) |
-|--------|----------|--------------------|--------------------|
+Still manageable
+Automatic distribution
+High engagement
+```
+
+### Scalability
+
+| Senders | Receivers | Emails/Day (Week 1) | Emails/Day (Week 6) |
+|---------|-----------|---------------------|---------------------|
 | 5 | 5 | 25 | 250 |
 | 10 | 10 | 50 | 500 |
 | 20 | 15 | 100 | 1,000 |
@@ -51,62 +51,62 @@ Guida completa per configurare warming con multipli account sender e receiver.
 
 ---
 
-## 🛠️ Setup Methods
+## Setup Methods
 
-> **📘 Guida Provider Italiani**: Per configurazione dettagliata di Gmail, Outlook e Libero, vedi [PROVIDER_SETUP_IT.md](PROVIDER_SETUP_IT.md)
+> **Italian Provider Guide**: For detailed configuration of Gmail, Outlook and Libero, see [PROVIDER_SETUP.md](PROVIDER_SETUP.md)
 
-### Metodo 1: Dashboard (Consigliato)
+### Method 1: Dashboard (Recommended)
 
-**Vantaggi**: Visuale, semplice, no script
+**Advantages**: Visual, simple, no scripts
 
-#### Step 1: Aggiungi Tutti i SENDER
+#### Step 1: Add All SENDERS
 
 ```
-1. Apri http://localhost:8501
-2. Vai su "Add New" → "Add Account"
-3. Per ogni sender:
-   - Email: vendite@tuodominio.com
+1. Open http://localhost:8501
+2. Go to "Add New" → "Add Account"
+3. For each sender:
+   - Email: sales@yourdomain.com
    - Type: sender
    - SMTP/IMAP config
    - Password
    - [Add Account]
-4. Ripeti 10 volte
+4. Repeat 10 times
 ```
 
-#### Step 2: Aggiungi Tutti i RECEIVER
+#### Step 2: Add All RECEIVERS
 
 ```
 1. "Add New" → "Add Account"
-2. Per ogni receiver:
+2. For each receiver:
    - Email: warmup1@gmail.com
    - Type: receiver
    - SMTP: smtp.gmail.com
    - IMAP: imap.gmail.com
-   - Password: [App Password Gmail]
+   - Password: [Gmail App Password]
    - [Add Account]
-3. Ripeti 10 volte
+3. Repeat 10 times
 ```
 
-#### Step 3: Crea Campagna
+#### Step 3: Create Campaign
 
 ```
 1. "Add New" → "Create Campaign"
-2. Name: "Warming Completo 2026"
-3. Sender Accounts: ✅ Select all 10
-4. Receiver Accounts: ✅ Select all 10
+2. Name: "Complete Warming 2026"
+3. Sender Accounts: Select all 10
+4. Receiver Accounts: Select all 10
 5. Duration: 6 weeks
 6. [Create Campaign]
 ```
 
-**Done!** 🎉
+**Done!**
 
 ---
 
-### Metodo 2: Script Automatico
+### Method 2: Automatic Script
 
-**Vantaggi**: Veloce, ripetibile, bulk import
+**Advantages**: Fast, repeatable, bulk import
 
-#### Usa lo Script Fornito
+#### Use Provided Script
 
 ```bash
 cd examples/
@@ -114,59 +114,59 @@ chmod +x setup_multi_accounts.sh
 ./setup_multi_accounts.sh
 ```
 
-**Lo script:**
-1. Aggiunge 10 sender
-2. Aggiunge 10 receiver (chiede password per ognuno)
-3. Crea campagna automaticamente
+**The script:**
+1. Adds 10 senders
+2. Adds 10 receivers (asks password for each)
+3. Creates campaign automatically
 
-#### Personalizza lo Script
+#### Customize the Script
 
-Modifica `setup_multi_accounts.sh`:
+Modify `setup_multi_accounts.sh`:
 
 ```bash
-# Cambia questi array con i tuoi account
+# Change these arrays with your accounts
 SENDERS=(
-    "tuo1@domain.com"
-    "tuo2@domain.com"
-    # ... aggiungi i tuoi
+    "your1@domain.com"
+    "your2@domain.com"
+    # ... add yours
 )
 
-SENDER_SMTP_HOST="smtp.tuodomain.com"
-SENDER_PASSWORD="password_comune"  # O chiedi per ognuno
+SENDER_SMTP_HOST="smtp.yourdomain.com"
+SENDER_PASSWORD="common_password"  # Or ask for each
 
 RECEIVERS=(
     "warmup1@gmail.com"
     "warmup2@outlook.com"
-    # ... aggiungi i tuoi
+    # ... add yours
 )
 ```
 
 ---
 
-### Metodo 3: CSV Import (Futuro)
+### Method 3: CSV Import (Future)
 
-**Prossima versione:** Import da CSV/Excel
+**Next version:** Import from CSV/Excel
 ```csv
 email,type,smtp_host,smtp_port,imap_host,imap_port,password
-vendite@domain.com,sender,smtp.domain.com,587,imap.domain.com,993,pass1
+sales@domain.com,sender,smtp.domain.com,587,imap.domain.com,993,pass1
 info@domain.com,sender,smtp.domain.com,587,imap.domain.com,993,pass2
 ```
 
 ---
 
-## 🎨 Patterns di Utilizzo
+## Usage Patterns
 
-### Pattern 1: Stesso Dominio
+### Pattern 1: Same Domain
 
-**Scenario**: Warming multipli account su stesso dominio
+**Scenario**: Warming multiple accounts on same domain
 
 ```
 SENDER (10):           DOMAIN
-├── vendite@           ├── tuodominio.com
-├── info@              ├── tuodominio.com
-├── supporto@          ├── tuodominio.com
-├── marketing@         ├── tuodominio.com
-└── ...                └── tuodominio.com
+├── sales@             ├── yourdomain.com
+├── info@              ├── yourdomain.com
+├── support@           ├── yourdomain.com
+├── marketing@         ├── yourdomain.com
+└── ...                └── yourdomain.com
 
 RECEIVER (10):         PROVIDER
 ├── warmup1@           ├── gmail.com
@@ -176,26 +176,26 @@ RECEIVER (10):         PROVIDER
 └── ...                └── (mix)
 ```
 
-**Vantaggi:**
-- Warm domain reputation globalmente
-- Tutti i sender beneficiano
-- Setup SMTP/IMAP uguale per tutti
+**Advantages:**
+- Warm domain reputation globally
+- All senders benefit
+- Same SMTP/IMAP setup for all
 
-**SMTP Config (uguale per tutti):**
+**SMTP Config (same for all):**
 ```json
 {
-  "smtp_host": "smtp.tuodominio.com",
+  "smtp_host": "smtp.yourdomain.com",
   "smtp_port": 587,
-  "imap_host": "imap.tuodominio.com",
+  "imap_host": "imap.yourdomain.com",
   "imap_port": 993
 }
 ```
 
 ---
 
-### Pattern 2: Domini Multipli
+### Pattern 2: Multiple Domains
 
-**Scenario**: Warming account su domini diversi
+**Scenario**: Warming accounts on different domains
 
 ```
 SENDER (10):           DOMAIN
@@ -204,111 +204,111 @@ SENDER (10):           DOMAIN
 ├── support@           ├── company2.com
 ├── contact@           ├── company2.com
 ├── hello@             ├── company3.com
-└── ...                └── (vari)
+└── ...                └── (various)
 
-RECEIVER (10): Stessi per tutti!
+RECEIVER (10): Same for all!
 ├── warmup1@gmail.com
 ├── warmup2@outlook.com
 └── ...
 ```
 
-**Vantaggi:**
-- Warm multipli domini contemporaneamente
-- Receiver pool condiviso
-- Efficiente uso risorse
+**Advantages:**
+- Warm multiple domains simultaneously
+- Shared receiver pool
+- Efficient resource usage
 
-**Setup:** SMTP/IMAP diverso per ogni dominio
+**Setup:** Different SMTP/IMAP for each domain
 
 ---
 
-### Pattern 3: Scaling Graduale
+### Pattern 3: Gradual Scaling
 
-**Scenario**: Inizi piccolo, scali progressivamente
+**Scenario**: Start small, scale progressively
 
 ```
 Week 1-2:
-  2 sender + 3 receiver
+  2 senders + 3 receivers
 
 Week 3-4:
-  5 sender + 5 receiver  (aggiungi durante warming)
+  5 senders + 5 receivers  (add during warming)
 
 Week 5-6:
-  10 sender + 10 receiver  (aggiungi ancora)
+  10 senders + 10 receivers  (add more)
 ```
 
-**Vantaggi:**
-- Start cauto
-- Validi sistema prima
-- Scali su successo
+**Advantages:**
+- Cautious start
+- Validate system first
+- Scale on success
 
 ---
 
-## 🔧 Best Practices
+## Best Practices
 
-### Ratio Sender:Receiver
+### Sender:Receiver Ratio
 
-| Sender | Receiver Min | Receiver Opt | Note |
-|--------|--------------|--------------|------|
-| 1 | 2 | 3-5 | Sufficiente |
-| 5 | 5 | 8-10 | Bilanciato |
-| 10 | 10 | 15-20 | Ideale |
+| Senders | Min Receivers | Optimal Receivers | Notes |
+|---------|---------------|-------------------|-------|
+| 1 | 2 | 3-5 | Sufficient |
+| 5 | 5 | 8-10 | Balanced |
+| 10 | 10 | 15-20 | Ideal |
 | 20+ | 15+ | 25-30 | Enterprise |
 
-**Regola empirica**: `Receiver ≥ Sender` (minimo 1:1)
+**Rule of thumb**: `Receivers ≥ Senders` (minimum 1:1)
 
-### Diversificazione Receiver
+### Receiver Diversification
 
-**Buona diversificazione:**
+**Good diversification:**
 ```
 40% Gmail (warmup1-4@gmail.com)
 30% Outlook (warmup5-7@outlook.com)
 20% Yahoo (warmup8-9@yahoo.com)
-10% Altri (warmup10@proton.me)
+10% Others (warmup10@proton.me)
 ```
 
-**Perché?**
-- Simula destinatari reali
-- ESP diversi = pattern naturale
-- Nessun provider dominante
+**Why?**
+- Simulates real recipients
+- Different ESPs = natural pattern
+- No dominant provider
 
 ### Password Management
 
-**Opzione A: Password Comune**
+**Option A: Common Password**
 ```bash
-# Stessa password per tutti i sender dello stesso dominio
+# Same password for all senders on same domain
 SENDER_PASSWORD="SecurePass123!"
 
-# Pro: Setup veloce
-# Contro: Meno sicuro
+# Pro: Fast setup
+# Con: Less secure
 ```
 
-**Opzione B: Password Individuali**
+**Option B: Individual Passwords**
 ```bash
-# Password diversa per ogni account
-vendite@domain.com    → VenPass123!
-info@domain.com       → InfoPass456!
+# Different password for each account
+sales@domain.com    → SalesPass123!
+info@domain.com     → InfoPass456!
 
-# Pro: Più sicuro
-# Contro: Setup più lungo
+# Pro: More secure
+# Con: Longer setup
 ```
 
-**Opzione C: Password Manager**
+**Option C: Password Manager**
 ```bash
-# Usa 1Password, Bitwarden, etc.
-# Genera password uniche
-# Salva in vault
+# Use 1Password, Bitwarden, etc.
+# Generate unique passwords
+# Save in vault
 
-# Pro: Massima sicurezza
-# Contro: Richiede integrazione
+# Pro: Maximum security
+# Con: Requires integration
 ```
 
 ### Naming Convention
 
-**SENDER (produzione):**
+**SENDER (production):**
 ```
-vendite@domain.com
+sales@domain.com
 info@domain.com
-supporto@domain.com
+support@domain.com
 ```
 
 **RECEIVER (warming):**
@@ -318,14 +318,14 @@ warmup2@gmail.com
 warmup-company-01@outlook.com
 ```
 
-**Perché "warmup" nel nome?**
-- Riconoscimento immediato
-- Evita confusione con account reali
-- Facile gestione bulk
+**Why "warmup" in the name?**
+- Immediate recognition
+- Avoid confusion with real accounts
+- Easy bulk management
 
 ---
 
-## 📊 Monitoring Multi-Account
+## Multi-Account Monitoring
 
 ### Dashboard Overview
 
@@ -340,7 +340,7 @@ ACCOUNTS
 CAMPAIGNS
 ├── Active:     1
 ├── Progress:   Week 3/6 (50%)
-└── Status:     🟢 Healthy
+└── Status:     Healthy
 
 TODAY'S ACTIVITY
 ├── Sent:       150/250
@@ -353,17 +353,17 @@ TODAY'S ACTIVITY
 ```
 Dashboard → Accounts → Filter: Sender
 
-vendite@domain.com      ✅ Active
+sales@domain.com        Active
 ├── Sent: 75
 ├── Open: 87%
 ├── Bounce: 0.5%
-└── Status: 🟢 Healthy
+└── Status: Healthy
 
-info@domain.com         ✅ Active
+info@domain.com         Active
 ├── Sent: 73
 ├── Open: 85%
 ├── Bounce: 1.2%
-└── Status: 🟢 Healthy
+└── Status: Healthy
 
 ...
 ```
@@ -371,7 +371,7 @@ info@domain.com         ✅ Active
 ### Campaign Metrics
 
 ```
-Dashboard → Campaigns → "Warming Completo 2026"
+Dashboard → Campaigns → "Complete Warming 2026"
 
 Progress: ████████░░ 80% (Week 5/6)
 
@@ -380,7 +380,7 @@ METRICS
 ├── Avg Open:       86%
 ├── Avg Reply:      81%
 ├── Avg Bounce:     1.3%
-└── Health:         🟢 Excellent
+└── Health:         Excellent
 
 PER SENDER
 ├── All 10 active
@@ -391,102 +391,102 @@ PER SENDER
 
 ---
 
-## 🚨 Troubleshooting
+## Troubleshooting
 
-### Alcuni Sender Non Inviano
+### Some Senders Not Sending
 
-**Causa**: Bounce rate alto o errori SMTP
+**Cause**: High bounce rate or SMTP errors
 
-**Soluzione:**
+**Solution:**
 ```bash
 # Check account status
 Dashboard → Accounts → Filter: Error
 
 # Fix account
-1. Verifica password
+1. Verify password
 2. Check SMTP/IMAP config
 3. Test connection
 4. Resume account
 ```
 
-### Alcuni Receiver Non Rispondono
+### Some Receivers Not Responding
 
-**Causa**: IMAP non funziona o password sbagliata
+**Cause**: IMAP not working or wrong password
 
-**Soluzione:**
+**Solution:**
 ```bash
 # Check logs
 docker compose -f docker/docker-compose.prod.yml logs worker | grep receiver
 
-# Verifica inbox manualmente
+# Verify inbox manually
 # Fix password/IMAP config
 # Restart worker
 ```
 
-### Distribuzione Non Bilanciata
+### Unbalanced Distribution
 
-**Causa**: Casualità del sistema
+**Cause**: System randomness
 
-**Soluzione:**
-- ✅ Normale: Piccole variazioni sono OK
-- ✅ Nel lungo periodo si bilancia
-- ❌ Se molto sbilanciata: check logs
+**Solution:**
+- Normal: Small variations are OK
+- In the long term it balances out
+- If very unbalanced: check logs
 
 ---
 
-## 💡 Tips & Tricks
+## Tips & Tricks
 
 ### Tip 1: Staging Before Production
 
 ```
-1. Setup 2 sender + 2 receiver (test)
+1. Setup 2 senders + 2 receivers (test)
 2. Run 1 week
-3. Verify tutto funziona
+3. Verify everything works
 4. Scale to 10 + 10
 ```
 
 ### Tip 2: Batch Adding
 
 ```
-# Aggiungi 5 sender, check
-# Poi altri 5
-# Invece di tutti e 10 insieme
+# Add 5 senders, check
+# Then another 5
+# Instead of all 10 together
 ```
 
 ### Tip 3: Gradual Campaign Start
 
 ```
-# Campagna 1: 5 sender + 5 receiver
-# Dopo 2 settimane:
-# Campagna 2: altri 5 sender + stessi receiver
+# Campaign 1: 5 senders + 5 receivers
+# After 2 weeks:
+# Campaign 2: another 5 senders + same receivers
 ```
 
 ### Tip 4: Shared Receiver Pool
 
 ```
-# Crea pool grande di receiver
-RECEIVERS: 20 account
+# Create large receiver pool
+RECEIVERS: 20 accounts
 
-# Usa per multiple campagne
-Campagna A: 10 sender → 20 receiver
-Campagna B: 5 sender → stessi 20 receiver
+# Use for multiple campaigns
+Campaign A: 10 senders → 20 receivers
+Campaign B: 5 senders → same 20 receivers
 
-✅ Massima efficienza
+Maximum efficiency
 ```
 
 ---
 
-## 📈 Scaling Beyond 10+10
+## Scaling Beyond 10+10
 
-### 20 Sender + 15 Receiver
+### 20 Senders + 15 Receivers
 
 **Setup:**
 ```
 Week 1: 20 × 5 = 100 emails/day
 Week 6: 20 × 50 = 1,000 emails/day
 
-Receiver load: 50-70 email/day
-✅ Gestibile
+Receiver load: 50-70 emails/day
+Manageable
 ```
 
 **Resources:**
@@ -498,16 +498,16 @@ worker:
     cpus: '4.0'
 ```
 
-### 50+ Sender
+### 50+ Senders
 
 **Multi-Campaign Strategy:**
 ```
-Campaign 1: Sender 1-25  → Receiver Pool A
-Campaign 2: Sender 26-50 → Receiver Pool B
+Campaign 1: Senders 1-25  → Receiver Pool A
+Campaign 2: Senders 26-50 → Receiver Pool B
 
-O
+OR
 
-Campaign 1: Tutti 50 sender → 30 receiver pool
+Campaign 1: All 50 senders → 30 receiver pool
 ```
 
 **Infrastructure:**
@@ -525,56 +525,56 @@ resources:
 
 ---
 
-## ✅ Checklist Multi-Account
+## Multi-Account Checklist
 
-Prima di iniziare:
+Before starting:
 
-- [ ] Hai almeno 2-3 receiver per ogni sender
-- [ ] App Password create per Gmail accounts
-- [ ] SMTP/IMAP credentials corrette
-- [ ] DNS records (SPF/DKIM/DMARC) configurati
+- [ ] Have at least 2-3 receivers for each sender
+- [ ] App Passwords created for Gmail accounts
+- [ ] SMTP/IMAP credentials correct
+- [ ] DNS records (SPF/DKIM/DMARC) configured
 - [ ] Docker running
 - [ ] WarmIt started (`./start.sh`)
 - [ ] Dashboard accessible (http://localhost:8501)
 
-Setup completato:
+Setup completed:
 
-- [ ] Tutti i sender aggiunti e active
-- [ ] Tutti i receiver aggiunti e active
-- [ ] Campagna creata
+- [ ] All senders added and active
+- [ ] All receivers added and active
+- [ ] Campaign created
 - [ ] Status: Active
-- [ ] Prime email inviate
-- [ ] Check logs per errori
-- [ ] Monitor dashboard giornalmente
+- [ ] First emails sent
+- [ ] Check logs for errors
+- [ ] Monitor dashboard daily
 
 ---
 
-## 🎓 Real-World Example
+## Real-World Example
 
-**Azienda con 10 persone nel team vendite:**
+**Company with 10 people in sales team:**
 
 ```
 SETUP
-├── 10 account email aziendali (sender)
-├── 10 account Gmail personali (receiver)
-└── 1 campagna di 6 settimane
+├── 10 business email accounts (senders)
+├── 10 personal Gmail accounts (receivers)
+└── 1 campaign of 6 weeks
 
-RISULTATI DOPO 6 SETTIMANE
-├── 3,500 email inviate
+RESULTS AFTER 6 WEEKS
+├── 3,500 emails sent
 ├── 87% open rate
 ├── 83% reply rate
 ├── 1.2% bounce rate
-├── ✅ Domain reputation eccellente
-└── ✅ Pronto per cold email campaign
+├── Excellent domain reputation
+└── Ready for cold email campaign
 
-TEMPO RISPARMIATO
-├── Warming manuale: 40+ ore
-├── WarmIt automatico: 15 minuti setup
+TIME SAVED
+├── Manual warming: 40+ hours
+├── WarmIt automatic: 15 minutes setup
 └── ROI: 160x
 ```
 
 ---
 
-**Ready to warm 10+ accounts? Let's go! 🔥**
+**Ready to warm 10+ accounts? Let's go!**
 
-Per domande: [FAQ.md](FAQ.md)
+For questions: [FAQ.md](FAQ.md)

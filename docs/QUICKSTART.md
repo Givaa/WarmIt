@@ -1,19 +1,19 @@
 # WarmIt - Quick Start Guide
 
-Guida rapida per iniziare subito con WarmIt!
+Quick guide to get started with WarmIt right away!
 
-## 🚀 Setup in 5 Minuti
+## Setup in 5 Minutes
 
-### 1. Prerequisiti
+### 1. Prerequisites
 
 ```bash
-# Verifica Python 3.11+
+# Verify Python 3.11+
 python3 --version
 
-# Installa Poetry (se non l'hai)
+# Install Poetry (if you don't have it)
 curl -sSL https://install.python-poetry.org | python3 -
 
-# Installa Redis
+# Install Redis
 # macOS:
 brew install redis
 
@@ -21,48 +21,48 @@ brew install redis
 sudo apt-get install redis-server
 ```
 
-### 2. Setup Progetto
+### 2. Project Setup
 
 ```bash
-# Clone o vai nella directory
+# Clone or navigate to directory
 cd WarmIt
 
-# Esegui setup automatico
+# Run automatic setup
 chmod +x scripts/setup.sh
 ./scripts/setup.sh
 ```
 
-### 3. Configura API Key
+### 3. Configure API Key
 
-Scegli un provider AI gratuito:
+Choose a free AI provider:
 
-**Opzione A: OpenRouter (Raccomandato)**
-1. Vai su https://openrouter.ai
-2. Registrati e ottieni API key
-3. Modifica `.env`:
+**Option A: OpenRouter (Recommended)**
+1. Go to https://openrouter.ai
+2. Sign up and get API key
+3. Edit `.env`:
 ```bash
 AI_PROVIDER=openrouter
 OPENROUTER_API_KEY=sk-or-v1-your-key-here
 AI_MODEL=meta-llama/llama-3.3-70b-instruct:free
 ```
 
-**Opzione B: Groq**
-1. Vai su https://console.groq.com
-2. Registrati e crea API key
-3. Modifica `.env`:
+**Option B: Groq**
+1. Go to https://console.groq.com
+2. Sign up and create API key
+3. Edit `.env`:
 ```bash
 AI_PROVIDER=groq
 GROQ_API_KEY=gsk_your-key-here
 AI_MODEL=llama-3.3-70b-versatile
 ```
 
-### 4. Avvia Servizi
+### 4. Start Services
 
 ```bash
-# Modo facile - tutto in uno
+# Easy way - all in one
 make dev
 
-# Oppure manualmente in terminali separati:
+# Or manually in separate terminals:
 # Terminal 1:
 redis-server
 
@@ -76,33 +76,33 @@ make worker
 make beat
 ```
 
-### 5. Verifica Installazione
+### 5. Verify Installation
 
 ```bash
 # Check API
 curl http://localhost:8000/health
 
-# Dovrebbe rispondere:
+# Should respond:
 # {"status":"healthy"}
 ```
 
-## 📧 Primo Warming
+## First Warming
 
-### 1. Aggiungi Account Gmail
+### 1. Add Gmail Account
 
-Prima, crea una [App Password Gmail](https://myaccount.google.com/apppasswords):
-- Vai su Google Account → Security
-- Abilita 2-Step Verification
-- Crea App Password per "Mail"
+First, create a [Gmail App Password](https://myaccount.google.com/apppasswords):
+- Go to Google Account → Security
+- Enable 2-Step Verification
+- Create App Password for "Mail"
 
-Poi aggiungi l'account:
+Then add the account:
 
 ```bash
-# Sender (account da riscaldare)
+# Sender (account to warm up)
 curl -X POST http://localhost:8000/api/accounts \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "tuo-sender@gmail.com",
+    "email": "your-sender@gmail.com",
     "type": "sender",
     "smtp_host": "smtp.gmail.com",
     "smtp_port": 587,
@@ -110,16 +110,16 @@ curl -X POST http://localhost:8000/api/accounts \
     "imap_host": "imap.gmail.com",
     "imap_port": 993,
     "imap_use_ssl": true,
-    "password": "la-tua-app-password"
+    "password": "your-app-password"
   }'
 ```
 
 ```bash
-# Receiver (account che risponde)
+# Receiver (account that responds)
 curl -X POST http://localhost:8000/api/accounts \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "tuo-receiver@gmail.com",
+    "email": "your-receiver@gmail.com",
     "type": "receiver",
     "smtp_host": "smtp.gmail.com",
     "smtp_port": 587,
@@ -127,31 +127,31 @@ curl -X POST http://localhost:8000/api/accounts \
     "imap_host": "imap.gmail.com",
     "imap_port": 993,
     "imap_use_ssl": true,
-    "password": "altra-app-password"
+    "password": "another-app-password"
   }'
 ```
 
-### 2. Crea Campagna
+### 2. Create Campaign
 
 ```bash
 curl -X POST http://localhost:8000/api/campaigns \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Prima Campagna",
+    "name": "First Campaign",
     "sender_account_ids": [1],
     "receiver_account_ids": [2],
     "duration_weeks": 4
   }'
 ```
 
-### 3. Avvia Warming (Test Manuale)
+### 3. Start Warming (Manual Test)
 
 ```bash
-# Invia prime email (normalmente automatico)
+# Send first emails (normally automatic)
 curl -X POST http://localhost:8000/api/campaigns/1/process
 ```
 
-### 4. Monitora Progresso
+### 4. Monitor Progress
 
 ```bash
 # Via CLI
@@ -163,179 +163,179 @@ curl http://localhost:8000/api/metrics/system
 curl http://localhost:8000/api/campaigns/1
 ```
 
-## 📊 Dashboard API
+## API Dashboard
 
-Apri nel browser: **http://localhost:8000/docs**
+Open in browser: **http://localhost:8000/docs**
 
-Qui trovi:
-- Documentazione interattiva Swagger
-- Test endpoint direttamente
-- Schema dati completo
+Here you'll find:
+- Interactive Swagger documentation
+- Test endpoints directly
+- Complete data schema
 
-## 🔧 Comandi Utili
+## Useful Commands
 
 ### Via Makefile
 
 ```bash
-make help       # Lista comandi
-make setup      # Setup iniziale
-make dev        # Avvia tutto
+make help       # List commands
+make setup      # Initial setup
+make dev        # Start everything
 make test       # Run tests
-make format     # Formatta codice
-make lint       # Lint codice
-make clean      # Pulisci temporanei
+make format     # Format code
+make lint       # Lint code
+make clean      # Clean temporary files
 ```
 
 ### Via CLI
 
 ```bash
-# Statistiche sistema
+# System statistics
 poetry run python scripts/cli.py stats
 
-# Lista accounts
+# List accounts
 poetry run python scripts/cli.py accounts
 
-# Lista campagne
+# List campaigns
 poetry run python scripts/cli.py campaigns
 
-# Verifica dominio
-poetry run python scripts/cli.py check-domain esempio@domain.com
+# Verify domain
+poetry run python scripts/cli.py check-domain example@domain.com
 
-# Inizializza DB
+# Initialize DB
 poetry run python scripts/cli.py init-db
 ```
 
 ### Via API
 
 ```bash
-# Lista tutti gli accounts
+# List all accounts
 curl http://localhost:8000/api/accounts
 
-# Dettagli account
+# Account details
 curl http://localhost:8000/api/accounts/1
 
-# Metriche account
+# Account metrics
 curl http://localhost:8000/api/metrics/accounts/1
 
-# Pausa campagna
+# Pause campaign
 curl -X PATCH http://localhost:8000/api/campaigns/1/status \
   -H "Content-Type: application/json" \
   -d '{"status": "paused"}'
 ```
 
-## 🎯 Best Practices
+## Best Practices
 
-1. **Inizia Piano**
+1. **Start Slow**
    - 1-2 sender accounts
    - 2-3 receiver accounts
-   - Monitora primi giorni
+   - Monitor first days
 
-2. **Verifica DNS**
+2. **Verify DNS**
    ```bash
    # SPF
-   dig TXT tuodominio.com
+   dig TXT yourdomain.com
 
-   # DKIM (se custom domain)
-   # Configura in Google Admin Console
+   # DKIM (if custom domain)
+   # Configure in Google Admin Console
 
    # DMARC
-   dig TXT _dmarc.tuodominio.com
+   dig TXT _dmarc.yourdomain.com
    ```
 
-3. **Monitora Metriche**
+3. **Monitor Metrics**
    - Bounce rate < 5%
    - Open rate > 70%
    - Reply rate > 50%
 
-4. **Gradualità**
-   - Non saltare settimane
-   - Mantieni volume costante
-   - No pause lunghe
+4. **Gradual Approach**
+   - Don't skip weeks
+   - Maintain consistent volume
+   - No long pauses
 
-## ❌ Troubleshooting Rapido
+## Quick Troubleshooting
 
-### Redis non si connette
+### Redis won't connect
 ```bash
 redis-server
-redis-cli ping  # Deve rispondere PONG
+redis-cli ping  # Must respond PONG
 ```
 
-### Celery non parte
+### Celery won't start
 ```bash
-# Reinstalla
+# Reinstall
 poetry install
 
-# Test diretto
+# Direct test
 poetry run celery -A warmit.tasks worker --loglevel=debug
 ```
 
-### Email non si inviano
+### Emails not sending
 ```bash
-# Verifica credenziali
-# Per Gmail usa App Password, non password normale
+# Verify credentials
+# For Gmail use App Password, not regular password
 
-# Abilita IMAP in Gmail:
+# Enable IMAP in Gmail:
 # Settings → Forwarding and POP/IMAP → Enable IMAP
 
-# Test connessione
+# Test connection
 curl -X POST http://localhost:8000/api/accounts/1/check-domain
 ```
 
-### API lenta
+### Slow API
 ```bash
-# Usa PostgreSQL invece di SQLite
-# Modifica in .env:
+# Use PostgreSQL instead of SQLite
+# Modify in .env:
 DATABASE_URL=postgresql+asyncpg://user:pass@localhost/warmit
 ```
 
-## 📚 Prossimi Passi
+## Next Steps
 
-1. **Leggi la documentazione completa**
-   - [USAGE.md](USAGE.md) - Guida dettagliata
-   - [FAQ.md](FAQ.md) - Domande frequenti
-   - [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) - Overview tecnico
+1. **Read complete documentation**
+   - [USAGE.md](USAGE.md) - Detailed guide
+   - [FAQ.md](FAQ.md) - Frequently asked questions
+   - [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) - Technical overview
 
-2. **Esplora esempi**
+2. **Explore examples**
    ```bash
    chmod +x examples/api_examples.sh
    ./examples/api_examples.sh
    ```
 
-3. **Personalizza configurazione**
-   - Modifica schedule in `src/warmit/tasks/__init__.py`
-   - Personalizza topics AI in `src/warmit/services/ai_generator.py`
-   - Adatta limiti in `.env`
+3. **Customize configuration**
+   - Modify schedule in `src/warmit/tasks/__init__.py`
+   - Customize AI topics in `src/warmit/services/ai_generator.py`
+   - Adjust limits in `.env`
 
 4. **Production deployment**
    - Setup Docker: `docker-compose up -d`
-   - Configura HTTPS con nginx
-   - Setup backup automatici
+   - Configure HTTPS with nginx
+   - Setup automatic backups
 
-## 🆘 Supporto
+## Support
 
-Hai problemi?
+Having problems?
 
-1. Controlla [FAQ.md](FAQ.md)
-2. Verifica logs: `tail -f logs/celery-worker.log`
-3. Apri issue su GitHub
+1. Check [FAQ.md](FAQ.md)
+2. Verify logs: `tail -f logs/celery-worker.log`
+3. Open issue on GitHub
 4. Email: support@yourdomain.com
 
-## 🎉 Successo!
+## Success!
 
-Se vedi questo, sei pronto:
-- ✅ API risponde su http://localhost:8000
-- ✅ Redis connesso
-- ✅ Celery worker running
-- ✅ Account configurati
-- ✅ Campagna attiva
+If you see this, you're ready:
+- API responding on http://localhost:8000
+- Redis connected
+- Celery worker running
+- Accounts configured
+- Campaign active
 
-**Il warming è ora automatico!**
+**Warming is now automatic!**
 
-Le email verranno inviate ogni 2 ore e le risposte saranno automatiche ogni 30 minuti.
+Emails will be sent every 2 hours and responses will be automatic every 30 minutes.
 
-Monitora il progresso con:
+Monitor progress with:
 ```bash
 make cli campaigns
 ```
 
-Buon warming! 🔥
+Happy warming!

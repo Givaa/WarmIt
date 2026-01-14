@@ -18,24 +18,61 @@ NC='\033[0m' # No Color
 
 # Configuration
 COMPOSE_FILE="docker/docker-compose.prod.yml"
-ENV_FILE=".env"
+ENV_FILE="docker/.env"
+ENV_EXAMPLE=".env.example"
 
-# Check if .env exists
+# Check if .env exists in docker/ directory
 if [ ! -f "$ENV_FILE" ]; then
-    echo -e "${RED}❌ Error: .env file not found${NC}"
+    echo -e "${RED}❌ Error: docker/.env file not found${NC}"
     echo ""
-    echo "Creating .env from example..."
-    cp .env.example .env
-    echo -e "${YELLOW}⚠️  Please edit .env and add your API keys!${NC}"
+
+    # Check if we have .env.example
+    if [ -f "$ENV_EXAMPLE" ]; then
+        echo "Creating docker/.env from .env.example..."
+        cp "$ENV_EXAMPLE" "$ENV_FILE"
+
+        # Update DATABASE_URL for production
+        sed -i.bak 's|sqlite+aiosqlite:///./warmit.db|postgresql+asyncpg://warmit:warmit_secure_password_2026@postgres:5432/warmit|g' "$ENV_FILE"
+        sed -i.bak 's|redis://localhost:6379/0|redis://redis:6379/0|g' "$ENV_FILE"
+        sed -i.bak 's|DEBUG=true|DEBUG=false|g' "$ENV_FILE"
+        rm -f "${ENV_FILE}.bak"
+
+        echo -e "${GREEN}✅ Created docker/.env${NC}"
+    else
+        echo -e "${RED}❌ Error: .env.example not found${NC}"
+        exit 1
+    fi
+
+    echo ""
+    echo -e "${YELLOW}⚠️  IMPORTANT: Please edit docker/.env and add your API keys!${NC}"
     echo ""
     echo "Required configuration:"
-    echo "  - AI_PROVIDER (openrouter or groq)"
-    echo "  - OPENROUTER_API_KEY or GROQ_API_KEY"
-    echo "  - POSTGRES_PASSWORD (set a strong password)"
+    echo "  1. Choose AI provider: AI_PROVIDER (openrouter or groq)"
+    echo "  2. Add API key: OPENROUTER_API_KEY=sk-or-v1-xxxxx"
+    echo "  3. Set secure password: POSTGRES_PASSWORD=your_secure_password"
     echo ""
-    echo "After editing .env, run this script again."
-    exit 1
+    echo "Edit with: nano docker/.env"
+    echo ""
+    read -p "Press Enter after editing docker/.env, or Ctrl+C to exit..."
 fi
+
+# Verify API key is configured
+if grep -q "your_openrouter_key_here\|your_groq_key_here" "$ENV_FILE" 2>/dev/null; then
+    echo ""
+    echo -e "${YELLOW}⚠️  Warning: API key not configured in docker/.env${NC}"
+    echo "Please add your OpenRouter or Groq API key:"
+    echo "  OPENROUTER_API_KEY=sk-or-v1-xxxxx"
+    echo "  or"
+    echo "  GROQ_API_KEY=gsk_xxxxx"
+    echo ""
+    read -p "Continue anyway? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+fi
+
+echo -e "${GREEN}✅ Configuration file found${NC}"
 
 # Check if Docker is running
 if ! docker info > /dev/null 2>&1; then
