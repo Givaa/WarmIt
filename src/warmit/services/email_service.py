@@ -77,7 +77,7 @@ class EmailService:
             username: SMTP username
             password: SMTP password
             message: EmailMessage to send
-            use_tls: Whether to use TLS
+            use_tls: Whether to use STARTTLS (True) or SSL (False)
 
         Returns:
             True if sent successfully, False otherwise
@@ -87,21 +87,36 @@ class EmailService:
 
             mime_msg = message.to_mime()
 
-            # Send via SMTP
-            await aiosmtplib.send(
-                mime_msg,
-                hostname=smtp_host,
-                port=smtp_port,
-                username=username,
-                password=password,
-                use_tls=use_tls,
-            )
+            # Port 465 requires SSL/TLS without STARTTLS
+            # Port 587 requires STARTTLS
+            if smtp_port == 465:
+                # SSL/TLS direct connection (implicit TLS)
+                await aiosmtplib.send(
+                    mime_msg,
+                    hostname=smtp_host,
+                    port=smtp_port,
+                    username=username,
+                    password=password,
+                    use_tls=True,  # Enable TLS wrapper
+                    start_tls=False,  # Don't use STARTTLS
+                )
+            else:
+                # Port 587 or other: use STARTTLS if use_tls=True
+                await aiosmtplib.send(
+                    mime_msg,
+                    hostname=smtp_host,
+                    port=smtp_port,
+                    username=username,
+                    password=password,
+                    use_tls=use_tls,
+                    start_tls=use_tls,  # STARTTLS for port 587
+                )
 
             logger.info(f"Email sent successfully: {message.subject}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to send email: {e}")
+            logger.error(f"SMTP connection failed: {e}")
             return False
 
     @staticmethod
@@ -295,11 +310,23 @@ class EmailService:
 
         # Test SMTP
         try:
-            smtp = aiosmtplib.SMTP(
-                hostname=smtp_host,
-                port=smtp_port,
-                use_tls=smtp_use_tls,
-            )
+            # Port 465 requires SSL/TLS wrapper, port 587 uses STARTTLS
+            if smtp_port == 465:
+                # SSL/TLS direct connection (implicit TLS)
+                smtp = aiosmtplib.SMTP(
+                    hostname=smtp_host,
+                    port=smtp_port,
+                    use_tls=True,
+                    start_tls=False,
+                )
+            else:
+                # Port 587 or other: use STARTTLS
+                smtp = aiosmtplib.SMTP(
+                    hostname=smtp_host,
+                    port=smtp_port,
+                    use_tls=smtp_use_tls,
+                    start_tls=smtp_use_tls,
+                )
             await smtp.connect()
             await smtp.login(username, password)
             await smtp.quit()

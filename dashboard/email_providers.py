@@ -64,12 +64,12 @@ EMAIL_PROVIDERS = {
     "libero.it": {
         "name": "Libero Mail",
         "smtp_host": "smtp.libero.it",
-        "smtp_port": 587,
-        "smtp_use_tls": True,
+        "smtp_port": 465,
+        "smtp_use_tls": False,  # Uses SSL on port 465, not STARTTLS
         "imap_host": "imapmail.libero.it",
         "imap_port": 993,
         "imap_use_ssl": True,
-        "notes": "Use your regular email password."
+        "notes": "Use port 465 with SSL (not 587 with TLS). Use your regular email password."
     },
     "virgilio.it": {
         "name": "Virgilio Mail",
