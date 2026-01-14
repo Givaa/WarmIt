@@ -82,6 +82,85 @@ services:
 
 ---
 
+### 4. API Key Detection with Quotes/Spaces
+
+**Problem:** `start.sh` still failed to detect API keys even when properly configured, due to quotes and comment handling.
+
+**Root Cause:** Simple string comparison didn't handle:
+- Quotes around values: `OPENROUTER_API_KEY="sk-or-v1-xxx"`
+- Inline comments: `OPENROUTER_API_KEY=sk-or-v1-xxx # my key`
+- Extra spaces
+
+**Fix:** Improved parsing with proper trimming:
+
+```bash
+# Before (failed with quotes)
+OPENROUTER_KEY=$(grep "^OPENROUTER_API_KEY=" "$ENV_FILE" | cut -d'=' -f2)
+if [ "$OPENROUTER_KEY" = "your_openrouter_key_here" ]; then
+
+# After (handles quotes, spaces, comments)
+OPENROUTER_KEY=$(grep "^OPENROUTER_API_KEY=" "$ENV_FILE" | cut -d'=' -f2 | tr -d ' "'"'"'' | sed 's/#.*//')
+if echo "$OPENROUTER_KEY" | grep -q "your_openrouter_key_here"; then
+```
+
+**Now works with:**
+- ✅ `OPENROUTER_API_KEY=sk-or-v1-xxx`
+- ✅ `OPENROUTER_API_KEY="sk-or-v1-xxx"`
+- ✅ `OPENROUTER_API_KEY='sk-or-v1-xxx'`
+- ✅ `OPENROUTER_API_KEY=sk-or-v1-xxx # comment`
+- ✅ `OPENROUTER_API_KEY = sk-or-v1-xxx` (spaces)
+
+---
+
+### 5. Poetry Installation Failures in Docker
+
+**Problem:**
+- Worker build: Step 4/9 `RUN curl` → CANCELED
+- Dashboard build: Step 6/7 `RUN poetry config` → ERROR
+
+**Root Cause:**
+1. `curl` to install Poetry fails (network/proxy issues)
+2. Poetry installation is complex and unreliable in Docker
+3. Slower build times with Poetry
+
+**Fix:** Replaced Poetry with pip using requirements.txt
+
+**Before (Dockerfile):**
+```dockerfile
+# Install Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 -
+ENV PATH="/root/.local/bin:$PATH"
+
+# Copy dependency files
+COPY pyproject.toml poetry.lock* ./
+
+# Install dependencies
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi
+```
+
+**After (Dockerfile):**
+```dockerfile
+# Copy dependency files
+COPY requirements.txt ./
+
+# Install Python dependencies with pip
+RUN pip install --no-cache-dir -r requirements.txt
+```
+
+**Advantages:**
+- ✅ No network dependency (curl)
+- ✅ Faster builds (pip is faster than poetry)
+- ✅ More reliable (pip is built-in)
+- ✅ Simpler Dockerfile
+- ✅ Better Docker layer caching
+
+**Applied to:**
+- `docker/Dockerfile` (API, Worker, Beat, Watchdog)
+- `docker/Dockerfile.dashboard` (Dashboard)
+
+---
+
 ## Testing
 
 After these fixes, the following should work:
@@ -118,6 +197,17 @@ OPENROUTER_API_KEY=sk-or-v1-xxxxx
 2. `start.sh`
    - Improved API key validation logic
    - Now checks only the selected provider's key
+   - Better parsing with quotes/spaces/comments support
+
+3. `docker/Dockerfile`
+   - Removed Poetry installation
+   - Now uses pip with requirements.txt
+   - Simpler, faster, more reliable
+
+4. `docker/Dockerfile.dashboard`
+   - Removed Poetry installation
+   - Now uses pip with requirements.txt
+   - Simpler, faster, more reliable
 
 ---
 

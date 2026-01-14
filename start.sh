@@ -57,12 +57,12 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 # Verify API key is configured
-AI_PROVIDER=$(grep "^AI_PROVIDER=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'')
+AI_PROVIDER=$(grep "^AI_PROVIDER=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'' | sed 's/#.*//')
 
 if [ "$AI_PROVIDER" = "openrouter" ]; then
     # Check OpenRouter key
-    OPENROUTER_KEY=$(grep "^OPENROUTER_API_KEY=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'')
-    if [ -z "$OPENROUTER_KEY" ] || [ "$OPENROUTER_KEY" = "your_openrouter_key_here" ]; then
+    OPENROUTER_KEY=$(grep "^OPENROUTER_API_KEY=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'' | sed 's/#.*//')
+    if [ -z "$OPENROUTER_KEY" ] || echo "$OPENROUTER_KEY" | grep -q "your_openrouter_key_here"; then
         echo ""
         echo -e "${YELLOW}⚠️  Warning: OpenRouter API key not configured${NC}"
         echo "Please add your OpenRouter API key in docker/.env:"
@@ -76,8 +76,8 @@ if [ "$AI_PROVIDER" = "openrouter" ]; then
     fi
 elif [ "$AI_PROVIDER" = "groq" ]; then
     # Check Groq key
-    GROQ_KEY=$(grep "^GROQ_API_KEY=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'')
-    if [ -z "$GROQ_KEY" ] || [ "$GROQ_KEY" = "your_groq_key_here" ]; then
+    GROQ_KEY=$(grep "^GROQ_API_KEY=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'' | sed 's/#.*//')
+    if [ -z "$GROQ_KEY" ] || echo "$GROQ_KEY" | grep -q "your_groq_key_here"; then
         echo ""
         echo -e "${YELLOW}⚠️  Warning: Groq API key not configured${NC}"
         echo "Please add your Groq API key in docker/.env:"
