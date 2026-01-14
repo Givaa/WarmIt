@@ -161,6 +161,28 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 ---
 
+### 6. ModuleNotFoundError: No module named 'warmit'
+
+**Problem:** Container `warmit-api` fails with `ModuleNotFoundError: No module named 'warmit'`
+
+**Root Cause:** Dockerfile copies `src/` to `/app/src/`, creating path `/app/src/warmit/`, but uvicorn command looks for `warmit.main:app` at `/app/warmit/`
+
+**Fix:** Changed COPY command to copy module directly to correct location
+
+**Before:**
+```dockerfile
+COPY src/ ./src/
+```
+
+**After:**
+```dockerfile
+COPY src/warmit/ ./warmit/
+```
+
+**Result:** Module path is now `/app/warmit/` which matches the import path `warmit.main:app`
+
+---
+
 ## Testing
 
 After these fixes, the following should work:

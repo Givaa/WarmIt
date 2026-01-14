@@ -22,6 +22,10 @@
 **Status:** ✅ FIXED
 **Solution:** Replaced Poetry with pip, using requirements.txt
 
+### Issue #6: ModuleNotFoundError: No module named 'warmit'
+**Status:** ✅ FIXED
+**Solution:** Changed `COPY src/ ./src/` → `COPY src/warmit/ ./warmit/` to match import path
+
 ---
 
 ## Quick Test
