@@ -31,10 +31,12 @@ if [ ! -f "$ENV_FILE" ]; then
         echo "Creating docker/.env from .env.example..."
         cp "$ENV_EXAMPLE" "$ENV_FILE"
 
-        # Update DATABASE_URL for production
+        # Update for production
         sed -i.bak 's|sqlite+aiosqlite:///./warmit.db|postgresql+asyncpg://warmit:warmit_secure_password_2026@postgres:5432/warmit|g' "$ENV_FILE"
         sed -i.bak 's|redis://localhost:6379/0|redis://redis:6379/0|g' "$ENV_FILE"
         sed -i.bak 's|DEBUG=true|DEBUG=false|g' "$ENV_FILE"
+        # Ensure POSTGRES_PASSWORD matches DATABASE_URL
+        sed -i.bak 's|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=warmit_secure_password_2026|g' "$ENV_FILE"
         rm -f "${ENV_FILE}.bak"
 
         echo -e "${GREEN}✅ Created docker/.env${NC}"
