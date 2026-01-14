@@ -1,2 +1,20 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Documents
+*.md text
+*.txt text
+
+# Scripts
+*.sh text eol=lf
+*.py text eol=lf
+
+# Config files
+*.yml text
+*.yaml text
+*.toml text
+*.json text
+*.env text
+
+# Docker
+Dockerfile text
