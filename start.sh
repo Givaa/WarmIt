@@ -187,13 +187,14 @@ echo ""
 echo "This may take a few minutes on first run (downloading images)"
 echo ""
 
-# Pull latest images
-echo "Pulling Docker images..."
-$DOCKER_COMPOSE -f $COMPOSE_FILE pull
+# Pull base images (redis, postgres, dozzle)
+echo "Pulling base images (Redis, PostgreSQL, Dozzle)..."
+$DOCKER_COMPOSE -f $COMPOSE_FILE pull redis postgres logs 2>&1 | grep -v "Pulling" | head -5 || true
 
 # Build custom images
 echo ""
-echo "Building WarmIt images..."
+echo "Building WarmIt custom images (API, Worker, Dashboard)..."
+echo "This may take 2-5 minutes depending on your system..."
 $DOCKER_COMPOSE -f $COMPOSE_FILE build
 
 # Start services

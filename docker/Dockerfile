@@ -2,17 +2,18 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Copy dependency files first for better caching
+COPY requirements.txt ./
+
+# Install system dependencies, Python packages, then remove build deps
 RUN apt-get update && apt-get install -y \
     curl \
     build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy dependency files
-COPY requirements.txt ./
-
-# Install Python dependencies with pip
-RUN pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir -r requirements.txt \
+    && apt-get remove -y build-essential \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /root/.cache
 
 # Copy application code
 COPY src/warmit/ ./warmit/

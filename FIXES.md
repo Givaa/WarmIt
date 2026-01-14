@@ -183,6 +183,28 @@ COPY src/warmit/ ./warmit/
 
 ---
 
+### 7. Warning: "no services to build" during pull
+
+**Problem:** During `docker compose pull`, shows warning "no services to build"
+
+**Root Cause:** `docker compose pull` without service names tries to pull all services, including those with `build:` directive, which generates a warning
+
+**Fix:** Specify only image-based services in pull command
+
+**Before:**
+```bash
+docker compose -f $COMPOSE_FILE pull
+```
+
+**After:**
+```bash
+docker compose -f $COMPOSE_FILE pull redis postgres logs
+```
+
+**Result:** Only pulls pre-built images (Redis, PostgreSQL, Dozzle), avoiding warning for buildable services
+
+---
+
 ## Testing
 
 After these fixes, the following should work:

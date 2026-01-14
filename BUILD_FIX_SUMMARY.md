@@ -26,6 +26,10 @@
 **Status:** ✅ FIXED
 **Solution:** Changed `COPY src/ ./src/` → `COPY src/warmit/ ./warmit/` to match import path
 
+### Issue #7: Warning "no services to build" during startup
+**Status:** ✅ FIXED
+**Solution:** Specify only image-based services in `docker compose pull` command
+
 ---
 
 ## Quick Test
@@ -220,13 +224,44 @@ After successful build:
 
 ---
 
+## Disk Space Management
+
+WarmIt requires approximately **2-5 GB** of disk space:
+- Docker images: ~1.5-2 GB
+- Data volumes: ~200 MB - 1 GB
+- Build cache: ~500 MB - 2 GB
+
+### If you get "No space left on device":
+
+```bash
+# Check space usage
+./check-docker-space.sh
+
+# Clean up safely (keeps data)
+./cleanup-docker.sh
+
+# Or manually
+docker system prune -a -f
+docker builder prune -f
+
+# Then rebuild
+cd docker
+docker compose build --no-cache
+docker compose up -d
+```
+
+See [DOCKER_SPACE.md](DOCKER_SPACE.md) for detailed space management guide.
+
+---
+
 ## Support
 
 If you still encounter issues:
 
 1. Check [FIXES.md](FIXES.md) for detailed explanations
-2. See [docker/README.md](docker/README.md) for Docker documentation
-3. Read [docs/UBUNTU_QUICKSTART.md](docs/UBUNTU_QUICKSTART.md) for Ubuntu guide
+2. See [DOCKER_SPACE.md](DOCKER_SPACE.md) for disk space issues
+3. See [docker/README.md](docker/README.md) for Docker documentation
+4. Read [docs/UBUNTU_QUICKSTART.md](docs/UBUNTU_QUICKSTART.md) for Ubuntu guide
 
 ---
 
