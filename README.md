@@ -204,5 +204,5 @@ MIT License - see [LICENSE](LICENSE)
 
 <p align="center">
   <strong>⭐ Star this repo if you find it useful!</strong><br/>
-  Made with ❤️ by <a href="https://github.com/yourusername">Giovanni Rapa</a>
+  Made with ❤️ by <a href="https://github.com/Givaa">Givaa</a>
 </p>
