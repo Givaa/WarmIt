@@ -101,7 +101,7 @@ WarmIt automatically:
 |-----|-------------|
 | [Quick Start](docs/QUICKSTART.md) | 5-minute setup guide |
 | [Multi-Account Setup](docs/MULTI_ACCOUNT_SETUP.md) | 10+ accounts configuration |
-| [Provider Setup (IT)](docs/PROVIDER_SETUP_IT.md) | Gmail, Outlook, Libero guide 🇮🇹 |
+| [Provider Setup](docs/PROVIDER_SETUP.md) | Gmail, Outlook, Libero, Aruba guide |
 | [Production](docs/PRODUCTION.md) | Deployment & best practices |
 | [Usage Guide](docs/USAGE.md) | Complete feature docs |
 | [FAQ](docs/FAQ.md) | Troubleshooting |

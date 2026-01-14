@@ -53,7 +53,7 @@ High engagement
 
 ## Setup Methods
 
-> **Italian Provider Guide**: For detailed configuration of Gmail, Outlook and Libero, see [PROVIDER_SETUP.md](PROVIDER_SETUP.md)
+> **Provider Guide**: For detailed configuration of Gmail, Outlook, Libero, and Aruba, see [PROVIDER_SETUP.md](PROVIDER_SETUP.md)
 
 ### Method 1: Dashboard (Recommended)
 
