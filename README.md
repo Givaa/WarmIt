@@ -78,6 +78,7 @@ WarmIt automatically:
 - ✅ Progressive volume scheduling
 - ✅ Auto-response system
 - ✅ Domain age analysis
+- ✅ **Auto-configuration for 20+ email providers**
 
 ### Enterprise
 - ✅ Web dashboard (Streamlit)
@@ -96,18 +97,41 @@ WarmIt automatically:
 
 ---
 
+## 📧 Email Provider Auto-Configuration
+
+**No more searching for SMTP settings!** Just type your email and everything auto-fills:
+
+```
+Type: mario@libero.it
+↓ Auto-detects Libero Mail
+SMTP: smtp.libero.it:587 ✓
+IMAP: imapmail.libero.it:993 ✓
+```
+
+**Supported providers (20+):**
+- 🇮🇹 Italian: Libero, Virgilio, Aruba, TIM, Fastweb, Tiscali
+- 🌍 International: Gmail, Outlook, Yahoo, iCloud, AOL, ProtonMail, Zoho
+
+**How it works:**
+1. Dashboard → "Add Account"
+2. Select provider from dropdown OR let it auto-detect
+3. Enter email → settings auto-fill ✨
+4. Shows helpful notes (e.g., "Gmail needs App Password")
+5. All fields editable for custom configs
+
+**Example notes shown:**
+- **Gmail**: "Use App Password. Enable 2FA first, then create in Google Account settings"
+- **Aruba**: "Port 465 with SSL (not 587 TLS). For PEC use pec.aruba.it"
+- **Yahoo**: "Generate App Password in Account Security"
+
+---
+
 ## 📖 Documentation
 
 | Doc | Description |
 |-----|-------------|
-| [Quick Start](docs/QUICKSTART.md) | 5-minute setup guide |
-| [Multi-Account Setup](docs/MULTI_ACCOUNT_SETUP.md) | 10+ accounts configuration |
-| [Provider Setup](docs/PROVIDER_SETUP.md) | Gmail, Outlook, Libero, Aruba guide |
-| [Production](docs/PRODUCTION.md) | Deployment & best practices |
-| [Usage Guide](docs/USAGE.md) | Complete feature docs |
-| [FAQ](docs/FAQ.md) | Troubleshooting |
-| [Features](docs/FEATURES.md) | Complete feature list |
-| [Architecture](docs/PROJECT_SUMMARY.md) | System design |
+| [Architecture](docs/ARCHITECTURE.md) | System design & components |
+| [FAQ](docs/FAQ.md) | Troubleshooting & common issues |
 
 ---
 

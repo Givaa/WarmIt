@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import time
 import os
+from email_providers import get_provider_config, get_all_providers, get_provider_by_name
 
 # Configuration - Use environment variable for Docker, fallback to localhost for local dev
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
@@ -564,22 +565,73 @@ elif page == "➕ Add New":
     with tab1:
         st.subheader("Add Email Account")
 
+        # Provider selection or auto-detection
+        st.markdown("##### 📬 Provider Configuration")
+
+        # Get list of providers for dropdown
+        providers_list = get_all_providers()
+        provider_names = ["Auto-detect from email"] + [name for _, name in providers_list]
+
+        selected_provider_name = st.selectbox(
+            "Email Provider",
+            provider_names,
+            help="Select your email provider or choose 'Auto-detect' to auto-fill based on email address"
+        )
+
+        # Initialize session state for form fields if not exists
+        if 'form_email' not in st.session_state:
+            st.session_state.form_email = ""
+        if 'form_config' not in st.session_state:
+            st.session_state.form_config = get_provider_config("")
+
         with st.form("add_account"):
             col1, col2 = st.columns(2)
 
             with col1:
-                email = st.text_input("Email Address*", placeholder="sender@example.com")
+                email = st.text_input(
+                    "Email Address*",
+                    value=st.session_state.form_email,
+                    placeholder="example@gmail.com",
+                    key="email_input"
+                )
                 account_type = st.selectbox("Account Type*", ["sender", "receiver"])
-                password = st.text_input("Password*", type="password", help="Use App Password for Gmail")
+                password = st.text_input(
+                    "Password*",
+                    type="password",
+                    help="Use App Password for providers that require it (Gmail, Yahoo, etc.)"
+                )
+
+            # Get config based on selection or auto-detect
+            if selected_provider_name == "Auto-detect from email":
+                config = get_provider_config(email)
+            else:
+                config = get_provider_by_name(selected_provider_name)
 
             with col2:
-                smtp_host = st.text_input("SMTP Host*", value="smtp.gmail.com")
-                smtp_port = st.number_input("SMTP Port*", value=587, min_value=1, max_value=65535)
-                imap_host = st.text_input("IMAP Host*", value="imap.gmail.com")
-                imap_port = st.number_input("IMAP Port*", value=993, min_value=1, max_value=65535)
+                smtp_host = st.text_input("SMTP Host*", value=config.get("smtp_host", "smtp.gmail.com"))
+                smtp_port = st.number_input(
+                    "SMTP Port*",
+                    value=config.get("smtp_port", 587),
+                    min_value=1,
+                    max_value=65535
+                )
+                imap_host = st.text_input("IMAP Host*", value=config.get("imap_host", "imap.gmail.com"))
+                imap_port = st.number_input(
+                    "IMAP Port*",
+                    value=config.get("imap_port", 993),
+                    min_value=1,
+                    max_value=65535
+                )
 
-            smtp_tls = st.checkbox("Use TLS for SMTP", value=True)
-            imap_ssl = st.checkbox("Use SSL for IMAP", value=True)
+            col_a, col_b = st.columns(2)
+            with col_a:
+                smtp_tls = st.checkbox("Use TLS for SMTP", value=config.get("smtp_use_tls", True))
+            with col_b:
+                imap_ssl = st.checkbox("Use SSL for IMAP", value=config.get("imap_use_ssl", True))
+
+            # Show provider notes if available
+            if config.get("notes"):
+                st.info(f"ℹ️ **{config.get('name', 'Provider')} Note:** {config['notes']}")
 
             submit = st.form_submit_button("➕ Add Account", use_container_width=True, type="primary")
 
@@ -606,6 +658,9 @@ elif page == "➕ Add New":
                             st.success(f"✅ Account created successfully!")
                             if isinstance(result, dict):
                                 st.json(result)
+                            # Reset form
+                            st.session_state.form_email = ""
+                            st.session_state.form_config = get_provider_config("")
                             time.sleep(2)
                             st.rerun()
                         else:
