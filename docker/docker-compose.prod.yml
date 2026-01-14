@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Redis with persistence and health checks
   redis:
@@ -52,8 +50,8 @@ services:
   # WarmIt API with auto-restart
   api:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: warmit-api
     command: uvicorn warmit.main:app --host 0.0.0.0 --port 8000 --workers 2
     ports:
@@ -95,8 +93,8 @@ services:
   # Celery Worker with auto-restart and monitoring
   worker:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: warmit-worker
     command: celery -A warmit.tasks worker --loglevel=info --concurrency=4 --max-tasks-per-child=1000
     environment:
@@ -136,8 +134,8 @@ services:
   # Celery Beat Scheduler with auto-restart
   beat:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: warmit-beat
     command: celery -A warmit.tasks beat --loglevel=info --pidfile=/tmp/celerybeat.pid
     environment:
@@ -177,8 +175,8 @@ services:
   # Streamlit Dashboard
   dashboard:
     build:
-      context: .
-      dockerfile: Dockerfile.dashboard
+      context: ..
+      dockerfile: docker/Dockerfile.dashboard
     container_name: warmit-dashboard
     command: streamlit run dashboard/app.py --server.port=8501 --server.address=0.0.0.0
     ports:
@@ -209,8 +207,8 @@ services:
   # Watchdog for monitoring and auto-recovery
   watchdog:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: warmit-watchdog
     command: python scripts/watchdog.py
     environment:
