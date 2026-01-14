@@ -182,7 +182,7 @@ if [ "$1" == "reset" ]; then
 fi
 
 # Start WarmIt
-echo -e "${BLUE}Starting WarmIt in production mode...${NC}"
+echo -e "${BLUE}Starting WarmIt...${NC}"
 echo ""
 echo "This may take a few minutes on first run (downloading images)"
 echo ""

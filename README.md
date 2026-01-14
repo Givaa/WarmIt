@@ -181,9 +181,13 @@ Dashboard (8501) ──► API (8000) ──► PostgreSQL
 
 ---
 
-## 🤝 Contributing
+## 📚 Documentation
 
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md)
+- [Quick Start Guide](docs/QUICKSTART.md) - Detailed setup instructions
+- [Architecture](docs/ARCHITECTURE.md) - System architecture and components
+- [System Requirements](docs/SYSTEM_REQUIREMENTS.md) - Hardware and software requirements
+- [FAQ](docs/FAQ.md) - Frequently asked questions
+- [Utility Scripts](scripts/README.md) - Maintenance and debugging tools
 
 ---
 

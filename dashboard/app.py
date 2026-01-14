@@ -7,9 +7,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import time
+import os
 
-# Configuration
-API_BASE_URL = "http://localhost:8000"
+# Configuration - Use environment variable for Docker, fallback to localhost for local dev
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 # Page config
 st.set_page_config(

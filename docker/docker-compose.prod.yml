@@ -96,8 +96,9 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: warmit-worker
-    command: celery -A warmit.tasks worker --loglevel=info --concurrency=4 --max-tasks-per-child=1000
+    command: celery -A warmit.tasks:celery_app worker --loglevel=info --concurrency=4 --max-tasks-per-child=1000
     environment:
+      C_FORCE_ROOT: "true"
       DATABASE_URL: postgresql+asyncpg://warmit:${POSTGRES_PASSWORD:-warmit_password}@postgres/warmit
       REDIS_URL: redis://redis:6379/0
       LOG_LEVEL: INFO
@@ -112,7 +113,7 @@ services:
       - ./logs:/app/logs
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "celery -A warmit.tasks inspect ping -d celery@$$HOSTNAME"]
+      test: ["CMD-SHELL", "celery -A warmit.tasks:celery_app inspect ping -d celery@$$HOSTNAME"]
       interval: 60s
       timeout: 30s
       retries: 3
@@ -137,7 +138,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: warmit-beat
-    command: celery -A warmit.tasks beat --loglevel=info --pidfile=/tmp/celerybeat.pid
+    command: celery -A warmit.tasks:celery_app beat --loglevel=info --pidfile=/tmp/celerybeat.pid
     environment:
       DATABASE_URL: postgresql+asyncpg://warmit:${POSTGRES_PASSWORD:-warmit_password}@postgres/warmit
       REDIS_URL: redis://redis:6379/0
@@ -212,6 +213,7 @@ services:
     container_name: warmit-watchdog
     command: python scripts/watchdog.py
     environment:
+      PYTHONPATH: /app
       DATABASE_URL: postgresql+asyncpg://warmit:${POSTGRES_PASSWORD:-warmit_password}@postgres/warmit
       REDIS_URL: redis://redis:6379/0
       API_URL: http://api:8000
@@ -241,7 +243,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       DOZZLE_LEVEL: info
-      DOZZLE_TAILSIZE: 300
       DOZZLE_FILTER: "name=warmit"
       DOZZLE_NO_ANALYTICS: "true"
     restart: always
