@@ -39,6 +39,7 @@ class WarmupScheduler:
         sender_account_ids: list[int],
         receiver_account_ids: list[int],
         duration_weeks: Optional[int] = None,
+        language: str = "en",
     ) -> Campaign:
         """
         Start a new warming campaign.
@@ -81,6 +82,7 @@ class WarmupScheduler:
             start_date=datetime.now(timezone.utc),
             duration_weeks=duration_weeks,
             current_week=1,
+            language=language,
         )
         self.session.add(campaign)
 
@@ -297,8 +299,11 @@ class WarmupScheduler:
                 # Pick random receiver
                 receiver = random.choice(receivers)
 
-                # Generate email content with sender's name
-                content = await self.ai_generator.generate_email(sender_name=sender.full_name)
+                # Generate email content with sender's name and campaign language
+                content = await self.ai_generator.generate_email(
+                    sender_name=sender.full_name,
+                    language=campaign.language  # type: ignore
+                )
 
                 # Create message
                 message = EmailMessage(
@@ -308,12 +313,12 @@ class WarmupScheduler:
                     body=content.body,
                 )
 
-                # Send email
+                # Send email (decrypt password for SMTP)
                 success = await self.email_service.send_email(
                     smtp_host=sender.smtp_host,
                     smtp_port=sender.smtp_port,
                     username=sender.email,
-                    password=sender.password,
+                    password=sender.get_password(),
                     message=message,
                     use_tls=sender.smtp_use_tls,
                 )

@@ -21,6 +21,7 @@ class TestEmailRequest(BaseModel):
     receiver_id: int
     count: int = 1
     include_replies: bool = True  # Whether receivers should auto-reply
+    language: str = "en"  # Language for emails ("en" or "it")
 
 
 class TestEmailResponse(BaseModel):
@@ -49,6 +50,7 @@ async def send_test_emails(
     result = await session.execute(
         select(Account).where(Account.id == request.sender_id)
     )
+
     sender = result.scalar_one_or_none()
 
     if not sender:
@@ -79,8 +81,11 @@ async def send_test_emails(
     # Send test emails
     for i in range(request.count):
         try:
-            # Generate email content with sender's name
-            email_content = await ai_generator.generate_email(sender_name=sender.full_name)
+            # Generate email content with sender's name and language
+            email_content = await ai_generator.generate_email(
+                sender_name=sender.full_name,
+                language=request.language  # type: ignore
+            )
 
             # Create email message
             message = EmailMessage(
@@ -90,12 +95,12 @@ async def send_test_emails(
                 body=email_content.body,
             )
 
-            # Send email
+            # Send email (decrypt password for SMTP)
             success = await EmailService.send_email(
                 smtp_host=sender.smtp_host,
                 smtp_port=sender.smtp_port,
                 username=sender.email,
-                password=sender.password,
+                password=sender.get_password(),
                 message=message,
                 use_tls=sender.smtp_use_tls,
             )
@@ -117,11 +122,12 @@ async def send_test_emails(
                     # Wait a few seconds before replying
                     await asyncio.sleep(2)
 
-                    # Generate reply content with receiver's name
+                    # Generate reply content with receiver's name and language
                     reply_subject, reply_body = await ai_generator.generate_reply(
                         email_content.subject,
                         email_content.body,
-                        sender_name=receiver.full_name
+                        sender_name=receiver.full_name,
+                        language=request.language  # type: ignore
                     )
 
                     # Create reply message
@@ -132,12 +138,12 @@ async def send_test_emails(
                         body=reply_body,
                     )
 
-                    # Send reply
+                    # Send reply (decrypt password for SMTP)
                     reply_success = await EmailService.send_email(
                         smtp_host=receiver.smtp_host,
                         smtp_port=receiver.smtp_port,
                         username=receiver.email,
-                        password=receiver.password,
+                        password=receiver.get_password(),
                         message=reply_message,
                         use_tls=receiver.smtp_use_tls,
                     )

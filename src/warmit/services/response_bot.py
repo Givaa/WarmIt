@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from warmit.models.account import Account, AccountStatus, AccountType
 from warmit.models.email import Email, EmailStatus
+from warmit.models.campaign import Campaign
 from warmit.services.email_service import EmailService, EmailMessage
 from warmit.services.ai_generator import AIGenerator
 from warmit.config import settings
@@ -50,12 +51,12 @@ class ResponseBot:
 
         logger.info(f"Processing receiver account: {account.email}")
 
-        # Fetch unread emails
+        # Fetch unread emails (decrypt password for IMAP)
         unread_emails = await self.email_service.fetch_unread_emails(
             imap_host=account.imap_host,
             imap_port=account.imap_port,
             username=account.email,
-            password=account.password,
+            password=account.get_password(),
             use_ssl=account.imap_use_ssl,
         )
 
@@ -77,22 +78,22 @@ class ResponseBot:
 
                     if success:
                         processed_count += 1
-                        # Mark as read
+                        # Mark as read (decrypt password for IMAP)
                         await self.email_service.mark_as_read(
                             imap_host=account.imap_host,
                             imap_port=account.imap_port,
                             username=account.email,
-                            password=account.password,
+                            password=account.get_password(),
                             message_id=email_data["message_id"],
                             use_ssl=account.imap_use_ssl,
                         )
                 else:
-                    # Just mark as read without responding
+                    # Just mark as read without responding (decrypt password for IMAP)
                     await self.email_service.mark_as_read(
                         imap_host=account.imap_host,
                         imap_port=account.imap_port,
                         username=account.email,
-                        password=account.password,
+                        password=account.get_password(),
                         message_id=email_data["message_id"],
                         use_ssl=account.imap_use_ssl,
                     )
@@ -197,7 +198,19 @@ class ResponseBot:
                 logger.warning(f"Sender account not found: {sender_email}")
                 return False
 
-            # Generate reply content with receiver's name
+            # Find the campaign this email belongs to
+            result = await self.session.execute(
+                select(Campaign).where(
+                    Campaign.sender_account_ids.contains([sender_account.id]),
+                    Campaign.receiver_account_ids.contains([account.id])
+                ).order_by(Campaign.created_at.desc())
+            )
+            campaign = result.scalar_one_or_none()
+
+            # Use campaign language if available, default to "en"
+            language = campaign.language if campaign else "en"
+
+            # Generate reply content with receiver's name and campaign language
             original_subject = email_data.get("subject", "")
             original_body = email_data.get("body", "")
 
@@ -205,6 +218,7 @@ class ResponseBot:
                 is_reply=True,
                 previous_content=f"Subject: {original_subject}\n\n{original_body}",
                 sender_name=account.full_name,
+                language=language,  # type: ignore
             )
 
             # Create reply message
@@ -217,12 +231,12 @@ class ResponseBot:
                 references=email_data.get("references") or email_data.get("message_id"),
             )
 
-            # Send reply
+            # Send reply (decrypt password for SMTP)
             success = await self.email_service.send_email(
                 smtp_host=account.smtp_host,
                 smtp_port=account.smtp_port,
                 username=account.email,
-                password=account.password,
+                password=account.get_password(),
                 message=reply_message,
                 use_tls=account.smtp_use_tls,
             )

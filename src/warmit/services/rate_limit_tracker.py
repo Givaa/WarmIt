@@ -1,8 +1,13 @@
-"""API rate limit tracking and monitoring system."""
+"""API rate limit tracking and monitoring system with multi-key support.
+
+Developed with ❤️ by Givaa
+https://github.com/Givaa
+"""
 
 import time
+import os
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 from dataclasses import dataclass, field
 from collections import deque
 import logging
@@ -12,9 +17,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class RateLimitInfo:
-    """Rate limit information for an API provider."""
+    """Rate limit information for an API key."""
 
     provider: str  # openrouter, groq, openai
+    key_id: str  # Key identifier (e.g., "openrouter_1", "groq_2")
 
     # Limits
     rpm_limit: int  # requests per minute
@@ -90,7 +96,7 @@ class RateLimitInfo:
 
 
 class RateLimitTracker:
-    """Track API rate limits across multiple providers."""
+    """Track API rate limits across multiple providers and API keys."""
 
     # Default rate limits (free tier)
     DEFAULT_LIMITS = {
@@ -110,60 +116,109 @@ class RateLimitTracker:
 
     def __init__(self):
         """Initialize rate limit tracker."""
-        self.providers: Dict[str, RateLimitInfo] = {}
-        self._initialize_providers()
+        self.keys: Dict[str, RateLimitInfo] = {}
+        self._initialize_keys_from_env()
 
-    def _initialize_providers(self):
-        """Initialize all providers with default limits."""
-        for provider, limits in self.DEFAULT_LIMITS.items():
-            self.providers[provider] = RateLimitInfo(
+    def _initialize_keys_from_env(self):
+        """Initialize API keys from environment variables."""
+        # OpenRouter keys
+        self._register_keys_for_provider("openrouter", "OPENROUTER_API_KEY")
+
+        # Groq keys
+        self._register_keys_for_provider("groq", "GROQ_API_KEY")
+
+        # OpenAI keys
+        self._register_keys_for_provider("openai", "OPENAI_API_KEY")
+
+        logger.info(f"Initialized rate limit tracker with {len(self.keys)} API keys")
+
+    def _register_keys_for_provider(self, provider: str, env_var_prefix: str):
+        """Register all API keys for a provider from environment.
+
+        Args:
+            provider: Provider name (openrouter, groq, openai)
+            env_var_prefix: Environment variable prefix (e.g., OPENROUTER_API_KEY)
+        """
+        if provider not in self.DEFAULT_LIMITS:
+            logger.warning(f"No default limits for provider: {provider}")
+            return
+
+        limits = self.DEFAULT_LIMITS[provider]
+        key_count = 0
+
+        # Check main key
+        if os.getenv(env_var_prefix):
+            key_id = f"{provider}_1"
+            self.keys[key_id] = RateLimitInfo(
                 provider=provider,
+                key_id=key_id,
                 rpm_limit=limits["rpm"],
                 rpd_limit=limits["rpd"],
                 minute_reset_time=time.time() + 60,
-                day_reset_time=time.time() + 86400,  # 24 hours
+                day_reset_time=time.time() + 86400,
             )
+            key_count += 1
+            logger.info(f"Registered {key_id}")
 
-    def set_provider_limits(self, provider: str, rpm: int, rpd: int):
-        """Override default limits for a provider.
+        # Check numbered keys (_2, _3, etc.)
+        for i in range(2, 10):  # Support up to 9 keys per provider
+            env_var = f"{env_var_prefix}_{i}"
+            if os.getenv(env_var):
+                key_id = f"{provider}_{i}"
+                self.keys[key_id] = RateLimitInfo(
+                    provider=provider,
+                    key_id=key_id,
+                    rpm_limit=limits["rpm"],
+                    rpd_limit=limits["rpd"],
+                    minute_reset_time=time.time() + 60,
+                    day_reset_time=time.time() + 86400,
+                )
+                key_count += 1
+                logger.info(f"Registered {key_id}")
+
+        if key_count > 0:
+            logger.info(f"Registered {key_count} API key(s) for {provider}")
+
+    def set_key_limits(self, key_id: str, rpm: int, rpd: int):
+        """Override default limits for a specific key.
 
         Args:
-            provider: Provider name
+            key_id: Key identifier (e.g., "openrouter_1")
             rpm: Requests per minute limit
             rpd: Requests per day limit
         """
-        if provider in self.providers:
-            self.providers[provider].rpm_limit = rpm
-            self.providers[provider].rpd_limit = rpd
-            logger.info(f"Updated {provider} limits: {rpm} RPM, {rpd} RPD")
+        if key_id in self.keys:
+            self.keys[key_id].rpm_limit = rpm
+            self.keys[key_id].rpd_limit = rpd
+            logger.info(f"Updated {key_id} limits: {rpm} RPM, {rpd} RPD")
 
-    def record_request(self, provider: str) -> bool:
-        """Record an API request.
+    def record_request(self, key_id: str) -> bool:
+        """Record an API request for a specific key.
 
         Args:
-            provider: Provider name
+            key_id: Key identifier (e.g., "openrouter_1")
 
         Returns:
             True if request allowed, False if rate limited
         """
-        if provider not in self.providers:
-            logger.warning(f"Unknown provider: {provider}")
+        if key_id not in self.keys:
+            logger.warning(f"Unknown key: {key_id}")
             return True
 
-        info = self.providers[provider]
+        info = self.keys[key_id]
         current_time = time.time()
 
         # Check if we need to reset counters
-        self._check_resets(provider)
+        self._check_resets(key_id)
 
         # Check if rate limited
         if info.requests_this_minute >= info.rpm_limit:
-            logger.warning(f"{provider}: RPM limit reached ({info.rpm_limit})")
+            logger.warning(f"{key_id}: RPM limit reached ({info.rpm_limit})")
             info.is_exhausted = True
             return False
 
         if info.requests_today >= info.rpd_limit:
-            logger.warning(f"{provider}: RPD limit reached ({info.rpd_limit})")
+            logger.warning(f"{key_id}: RPD limit reached ({info.rpd_limit})")
             info.is_exhausted = True
             return False
 
@@ -178,13 +233,16 @@ class RateLimitTracker:
 
         return True
 
-    def _check_resets(self, provider: str):
+    def _check_resets(self, key_id: str):
         """Check and perform counter resets if needed.
 
         Args:
-            provider: Provider name
+            key_id: Key identifier
         """
-        info = self.providers[provider]
+        if key_id not in self.keys:
+            return
+
+        info = self.keys[key_id]
         current_time = time.time()
 
         # Reset minute counter
@@ -192,30 +250,30 @@ class RateLimitTracker:
             info.requests_this_minute = 0
             info.minute_reset_time = current_time + 60
             info.is_exhausted = False
-            logger.debug(f"{provider}: RPM counter reset")
+            logger.debug(f"{key_id}: RPM counter reset")
 
         # Reset daily counter
         if current_time >= info.day_reset_time:
             info.requests_today = 0
             info.day_reset_time = current_time + 86400
             info.is_exhausted = False
-            logger.info(f"{provider}: RPD counter reset")
+            logger.info(f"{key_id}: RPD counter reset")
 
-    def can_make_request(self, provider: str) -> Tuple[bool, str]:
-        """Check if a request can be made.
+    def can_make_request(self, key_id: str) -> Tuple[bool, str]:
+        """Check if a request can be made with a specific key.
 
         Args:
-            provider: Provider name
+            key_id: Key identifier
 
         Returns:
             Tuple of (can_make_request, reason_if_not)
         """
-        if provider not in self.providers:
+        if key_id not in self.keys:
             return True, ""
 
-        self._check_resets(provider)
+        self._check_resets(key_id)
 
-        info = self.providers[provider]
+        info = self.keys[key_id]
 
         if info.requests_this_minute >= info.rpm_limit:
             wait_time = int(info.time_until_rpm_reset())
@@ -227,37 +285,136 @@ class RateLimitTracker:
 
         return True, ""
 
-    def get_provider_status(self, provider: str) -> Optional[RateLimitInfo]:
-        """Get current status for a provider.
+    def get_available_key(self, provider: str) -> Optional[str]:
+        """Get an available key for a provider.
+
+        Selects the key with the most available quota.
 
         Args:
             provider: Provider name
+
+        Returns:
+            Key ID if available, None if all keys exhausted
+        """
+        provider_keys = [k for k in self.keys.keys() if k.startswith(provider)]
+
+        if not provider_keys:
+            return None
+
+        # Find key with most remaining quota
+        best_key = None
+        best_remaining = -1
+
+        for key_id in provider_keys:
+            self._check_resets(key_id)
+            can_use, _ = self.can_make_request(key_id)
+
+            if can_use:
+                info = self.keys[key_id]
+                remaining = min(info.remaining_rpm(), info.remaining_rpd())
+
+                if remaining > best_remaining:
+                    best_remaining = remaining
+                    best_key = key_id
+
+        return best_key
+
+    def get_key_status(self, key_id: str) -> Optional[RateLimitInfo]:
+        """Get current status for a specific key.
+
+        Args:
+            key_id: Key identifier
 
         Returns:
             RateLimitInfo or None
         """
-        self._check_resets(provider)
-        return self.providers.get(provider)
+        if key_id in self.keys:
+            self._check_resets(key_id)
+        return self.keys.get(key_id)
 
-    def get_all_statuses(self) -> Dict[str, RateLimitInfo]:
-        """Get status for all providers."""
-        for provider in self.providers:
-            self._check_resets(provider)
-        return self.providers.copy()
-
-    def get_request_rate(self, provider: str) -> float:
-        """Get current request rate (requests per hour).
+    def get_provider_keys(self, provider: str) -> List[str]:
+        """Get all keys for a provider.
 
         Args:
             provider: Provider name
 
         Returns:
+            List of key IDs
+        """
+        return [k for k in self.keys.keys() if k.startswith(provider)]
+
+    def get_provider_aggregate_status(self, provider: str) -> Dict[str, any]:
+        """Get aggregated status for all keys of a provider.
+
+        Args:
+            provider: Provider name
+
+        Returns:
+            Dictionary with aggregated stats
+        """
+        provider_keys = self.get_provider_keys(provider)
+
+        if not provider_keys:
+            return {
+                "provider": provider,
+                "total_keys": 0,
+                "total_rpm_limit": 0,
+                "total_rpd_limit": 0,
+                "total_requests_minute": 0,
+                "total_requests_today": 0,
+                "available_keys": 0,
+            }
+
+        total_rpm = 0
+        total_rpd = 0
+        total_req_minute = 0
+        total_req_today = 0
+        available = 0
+
+        for key_id in provider_keys:
+            self._check_resets(key_id)
+            info = self.keys[key_id]
+
+            total_rpm += info.rpm_limit
+            total_rpd += info.rpd_limit
+            total_req_minute += info.requests_this_minute
+            total_req_today += info.requests_today
+
+            can_use, _ = self.can_make_request(key_id)
+            if can_use:
+                available += 1
+
+        return {
+            "provider": provider,
+            "total_keys": len(provider_keys),
+            "total_rpm_limit": total_rpm,
+            "total_rpd_limit": total_rpd,
+            "total_requests_minute": total_req_minute,
+            "total_requests_today": total_req_today,
+            "available_keys": available,
+            "utilization_rpm": (total_req_minute / total_rpm * 100) if total_rpm > 0 else 0,
+            "utilization_rpd": (total_req_today / total_rpd * 100) if total_rpd > 0 else 0,
+        }
+
+    def get_all_statuses(self) -> Dict[str, RateLimitInfo]:
+        """Get status for all keys."""
+        for key_id in self.keys:
+            self._check_resets(key_id)
+        return self.keys.copy()
+
+    def get_request_rate(self, key_id: str) -> float:
+        """Get current request rate for a key (requests per hour).
+
+        Args:
+            key_id: Key identifier
+
+        Returns:
             Requests per hour
         """
-        if provider not in self.providers:
+        if key_id not in self.keys:
             return 0.0
 
-        info = self.providers[provider]
+        info = self.keys[key_id]
 
         # Count requests in last hour
         current_time = time.time()
@@ -267,20 +424,20 @@ class RateLimitTracker:
 
         return float(recent_requests)
 
-    def get_saturation_forecast(self, provider: str) -> Optional[datetime]:
-        """Forecast when provider will hit daily limit.
+    def get_saturation_forecast(self, key_id: str) -> Optional[datetime]:
+        """Forecast when key will hit daily limit.
 
         Args:
-            provider: Provider name
+            key_id: Key identifier
 
         Returns:
             Estimated saturation datetime, or None if not on track to saturate
         """
-        if provider not in self.providers:
+        if key_id not in self.keys:
             return None
 
-        info = self.providers[provider]
-        request_rate = self.get_request_rate(provider)
+        info = self.keys[key_id]
+        request_rate = self.get_request_rate(key_id)
 
         hours_until = info.estimated_saturation_time(request_rate)
 
@@ -289,20 +446,20 @@ class RateLimitTracker:
 
         return datetime.now() + timedelta(hours=hours_until)
 
-    def reset_provider(self, provider: str):
-        """Manually reset a provider's counters.
+    def reset_key(self, key_id: str):
+        """Manually reset a key's counters.
 
         Args:
-            provider: Provider name
+            key_id: Key identifier
         """
-        if provider in self.providers:
-            info = self.providers[provider]
+        if key_id in self.keys:
+            info = self.keys[key_id]
             info.requests_this_minute = 0
             info.requests_today = 0
             info.minute_reset_time = time.time() + 60
             info.day_reset_time = time.time() + 86400
             info.is_exhausted = False
-            logger.info(f"Manually reset {provider} counters")
+            logger.info(f"Manually reset {key_id} counters")
 
 
 # Global rate limit tracker
@@ -321,27 +478,40 @@ def get_rate_limit_tracker() -> RateLimitTracker:
     return _rate_limit_tracker
 
 
-def record_api_request(provider: str) -> bool:
-    """Record an API request (convenience function).
+def record_api_request(key_id: str) -> bool:
+    """Record an API request for a specific key (convenience function).
 
     Args:
-        provider: Provider name
+        key_id: Key identifier (e.g., "openrouter_1")
 
     Returns:
         True if allowed, False if rate limited
     """
     tracker = get_rate_limit_tracker()
-    return tracker.record_request(provider)
+    return tracker.record_request(key_id)
 
 
-def check_rate_limit(provider: str) -> Tuple[bool, str]:
-    """Check if API request is allowed (convenience function).
+def check_rate_limit(key_id: str) -> Tuple[bool, str]:
+    """Check if API request is allowed for a specific key (convenience function).
 
     Args:
-        provider: Provider name
+        key_id: Key identifier
 
     Returns:
         Tuple of (allowed, reason_if_not)
     """
     tracker = get_rate_limit_tracker()
-    return tracker.can_make_request(provider)
+    return tracker.can_make_request(key_id)
+
+
+def get_available_key_for_provider(provider: str) -> Optional[str]:
+    """Get an available key for a provider (convenience function).
+
+    Args:
+        provider: Provider name
+
+    Returns:
+        Key ID if available, None if all exhausted
+    """
+    tracker = get_rate_limit_tracker()
+    return tracker.get_available_key(provider)

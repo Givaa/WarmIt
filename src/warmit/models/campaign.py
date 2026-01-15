@@ -57,6 +57,9 @@ class Campaign(Base, TimestampMixin):
     # Settings
     settings: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
+    # Language for email generation ("en" or "it")
+    language: Mapped[str] = mapped_column(String(10), default="en", nullable=False)
+
     @property
     def open_rate(self) -> float:
         """Calculate campaign open rate."""

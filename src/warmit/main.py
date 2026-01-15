@@ -1,4 +1,8 @@
-"""Main FastAPI application."""
+"""Main FastAPI application.
+
+Developed with ❤️ by Giovanni Rapa
+https://github.com/giovannirapa
+"""
 
 import logging
 from contextlib import asynccontextmanager

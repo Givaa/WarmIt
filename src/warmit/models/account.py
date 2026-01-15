@@ -129,8 +129,15 @@ class Account(Base, TimestampMixin):
         Returns:
             Plain text password
         """
+        # If we have a cached plaintext password from the load event, use it
+        if hasattr(self, '_plaintext_password') and self._plaintext_password:
+            return self._plaintext_password
+
+        # Otherwise, decrypt from the encrypted password field
         from warmit.services.encryption import decrypt_password
-        return decrypt_password(self.password)
+        decrypted = decrypt_password(self.password)
+        self._plaintext_password = decrypted
+        return decrypted
 
     def set_password(self, plaintext_password: str) -> None:
         """Set password (will be encrypted).

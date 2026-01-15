@@ -22,6 +22,7 @@ class CampaignCreate(BaseModel):
     sender_account_ids: list[int]
     receiver_account_ids: list[int]
     duration_weeks: Optional[int] = None
+    language: str = "en"  # Language for email generation ("en" or "it")
 
 
 class CampaignResponse(BaseModel):
@@ -46,6 +47,7 @@ class CampaignResponse(BaseModel):
     reply_rate: float
     bounce_rate: float
     progress_percentage: float
+    language: str
     created_at: datetime
 
     class Config:
@@ -83,6 +85,7 @@ async def create_campaign(
             sender_account_ids=campaign_data.sender_account_ids,
             receiver_account_ids=campaign_data.receiver_account_ids,
             duration_weeks=campaign_data.duration_weeks,
+            language=campaign_data.language,
         )
         return campaign
 

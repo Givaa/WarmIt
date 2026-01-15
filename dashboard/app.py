@@ -1,4 +1,8 @@
-"""WarmIt Dashboard - Web UI for monitoring and managing email warming campaigns."""
+"""WarmIt Dashboard - Web UI for monitoring and managing email warming campaigns.
+
+Developed with ❤️ by Givaa
+https://github.com/Givaa
+"""
 
 import streamlit as st
 import requests
@@ -104,8 +108,19 @@ if not st.session_state.authenticated:
                         st.query_params['session'] = session_token
 
                         st.success("✅ Login successful! Session will last 7 days.")
-                        time.sleep(1)
-                        st.rerun()
+
+                        # Use JavaScript to force a full page reload (prevents UI stacking)
+                        import streamlit.components.v1 as components
+                        components.html(
+                            """
+                            <script>
+                            setTimeout(function() {
+                                window.parent.location.reload();
+                            }, 1000);  // 1 second delay to show success message
+                            </script>
+                            """,
+                            height=0
+                        )
                     else:
                         st.error("❌ Incorrect password")
                 else:
@@ -322,31 +337,40 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Auto-refresh
-    auto_refresh = st.checkbox("Auto-refresh (30s)", value=True)
+    # Auto-refresh with session state persistence
+    if 'auto_refresh' not in st.session_state:
+        st.session_state.auto_refresh = False
+
+    auto_refresh = st.checkbox(
+        "Auto-refresh (30s)",
+        value=st.session_state.auto_refresh,
+        key='auto_refresh_checkbox'
+    )
+
+    # Update session state when checkbox changes
+    if auto_refresh != st.session_state.auto_refresh:
+        st.session_state.auto_refresh = auto_refresh
+
     if auto_refresh:
         st.info("Dashboard refreshes every 30 seconds")
 
-# Force clean page rendering by clearing DOM
-st.markdown(f"""
-<script>
-// Force clean render on page change - key by page name
-window.currentPage = '{page}';
-if (window.lastPage !== window.currentPage) {{
-    console.log('Page changed from', window.lastPage, 'to', window.currentPage);
-    window.lastPage = window.currentPage;
-}}
-</script>
-<style>
-/* Hide all page content by default, show only current */
-.main .block-container > div {{
-    display: none !important;
-}}
-.main .block-container > div:last-child {{
-    display: block !important;
-}}
-</style>
-""", unsafe_allow_html=True)
+    # Footer
+    st.markdown("---")
+    st.markdown(
+        "<div style='text-align: center; font-size: 0.8em; color: #666; padding: 10px;'>"
+        "Made with ❤️ by <a href='https://github.com/Givaa' target='_blank' style='color: #666; text-decoration: none;'>Givaa</a>"
+        "</div>",
+        unsafe_allow_html=True
+    )
+
+# Track page changes in session state
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = page
+
+# If page changed, force a clean rerun
+if st.session_state.current_page != page:
+    st.session_state.current_page = page
+    st.rerun()
 
 # Main content
 if page == "📊 Dashboard":
@@ -613,6 +637,9 @@ elif page == "🎯 Campaigns":
                 st.write("**Start Date:**", camp.get('start_date', 'N/A')[:10] if camp.get('start_date') else 'N/A')
                 st.write("**End Date:**", camp.get('end_date', 'N/A')[:10] if camp.get('end_date') else 'Ongoing')
                 st.write("**Duration:**", f"{camp.get('duration_weeks')} weeks")
+                lang = camp.get('language', 'en')
+                lang_display = "🇬🇧 English" if lang == "en" else "🇮🇹 Italiano"
+                st.write("**Language:**", lang_display)
 
             # Actions
             col1, col2, col3, col4 = st.columns(4)
@@ -856,7 +883,18 @@ elif page == "➕ Add New":
                     format_func=lambda x: next(r['email'] for r in receivers if r['id'] == x)
                 )
 
-            duration = st.slider("Duration (weeks)", min_value=2, max_value=12, value=6)
+            col_d1, col_d2 = st.columns(2)
+
+            with col_d1:
+                duration = st.slider("Duration (weeks)", min_value=2, max_value=12, value=6)
+
+            with col_d2:
+                campaign_language = st.selectbox(
+                    "Email Language",
+                    options=["en", "it"],
+                    format_func=lambda x: "🇬🇧 English" if x == "en" else "🇮🇹 Italiano",
+                    help="Language for AI-generated email content"
+                )
 
             st.info(f"Campaign will warm up {len(sender_ids)} sender(s) over {duration} weeks using {len(receiver_ids)} receiver(s)")
 
@@ -870,7 +908,8 @@ elif page == "➕ Add New":
                         "name": name,
                         "sender_account_ids": sender_ids,
                         "receiver_account_ids": receiver_ids,
-                        "duration_weeks": duration
+                        "duration_weeks": duration,
+                        "language": campaign_language
                     }
 
                     with st.spinner("Creating campaign..."):
@@ -890,6 +929,9 @@ elif page == "➕ Add New":
                                     st.write(f"📧 Senders: `{len(result.get('sender_account_ids', []))}`")
                                     st.write(f"📬 Receivers: `{len(result.get('receiver_account_ids', []))}`")
                                     st.write(f"📊 Week: `{result.get('current_week')}/{result.get('duration_weeks')}`")
+                                    lang = result.get('language', 'en')
+                                    lang_display = "🇬🇧 English" if lang == "en" else "🇮🇹 Italiano"
+                                    st.write(f"🌐 Language: `{lang_display}`")
 
                                 # Show expandable raw JSON
                                 with st.expander("View raw API response"):
@@ -943,7 +985,7 @@ elif page == "🧪 Quick Test":
     st.markdown("---")
 
     # Test options
-    col_a, col_b, col_c = st.columns(3)
+    col_a, col_b, col_c, col_d = st.columns(4)
 
     with col_a:
         num_emails = st.number_input(
@@ -962,32 +1004,72 @@ elif page == "🧪 Quick Test":
         )
 
     with col_c:
+        email_language = st.selectbox(
+            "Email Language",
+            options=["en", "it"],
+            format_func=lambda x: "🇬🇧 English" if x == "en" else "🇮🇹 Italiano",
+            help="Language for email content generation"
+        )
+
+    with col_d:
         st.write("")
         st.write("")
         if st.button("🚀 Send Test Email(s)", type="primary", use_container_width=True):
-            spinner_text = f"Sending {num_emails} test email(s)"
-            if include_replies:
-                spinner_text += " with auto-replies"
-            spinner_text += "..."
+            # Create a placeholder for status updates
+            status_placeholder = st.empty()
+            progress_placeholder = st.empty()
 
-            with st.spinner(spinner_text):
-                # Call API endpoint to send test emails
-                try:
+            try:
+                # Show initial status
+                status_placeholder.info(f"🔄 Connecting to API...")
+
+                # Calculate total operations
+                total_ops = num_emails
+                if include_replies:
+                    total_ops *= 2  # Each email + reply
+
+                # Initialize progress
+                progress_placeholder.progress(0)
+
+                # Prepare spinner text
+                spinner_text = f"📤 Generating and sending {num_emails} test email(s)"
+                if include_replies:
+                    spinner_text += " with auto-replies"
+                lang_flag = "🇮🇹" if email_language == "it" else "🇬🇧"
+                spinner_text += f" {lang_flag}..."
+
+                with st.spinner(spinner_text):
+                    # Update status
+                    status_placeholder.info(f"✉️ Sending request to API...")
+
+                    # Call API endpoint to send test emails
                     response = requests.post(
                         f"{API_BASE_URL}/api/test/send-emails",
                         json={
                             "sender_id": sender_id,
                             "receiver_id": receiver_id,
                             "count": num_emails,
-                            "include_replies": include_replies
+                            "include_replies": include_replies,
+                            "language": email_language
                         },
                         timeout=120  # 2 minute timeout for test emails with replies
                     )
+
+                    # Update progress to 50% while waiting for response
+                    progress_placeholder.progress(0.5)
+                    status_placeholder.info(f"⏳ Processing emails on server...")
 
                     if response.status_code == 200:
                         result = response.json()
                         emails_sent = result.get('emails_sent', 0)
                         replies_sent = result.get('replies_sent', 0)
+
+                        # Complete progress
+                        progress_placeholder.progress(1.0)
+
+                        # Clear status and show success
+                        status_placeholder.empty()
+                        progress_placeholder.empty()
 
                         success_msg = f"✅ Successfully sent {emails_sent} test email(s)"
                         if include_replies and replies_sent > 0:
@@ -1015,12 +1097,41 @@ elif page == "🧪 Quick Test":
 
                         st.info("💡 Check both inboxes to verify email delivery, replies, and content quality.")
                     else:
-                        st.error(f"❌ Failed to send test emails: {response.text}")
+                        # Clear progress and status
+                        status_placeholder.empty()
+                        progress_placeholder.empty()
 
-                except requests.exceptions.Timeout:
-                    st.error("❌ Request timed out. This may happen with multiple emails and replies. Check API logs.")
-                except Exception as e:
-                    st.error(f"❌ Error: {str(e)}")
+                        # Show error with details
+                        st.error(f"❌ Failed to send test emails (HTTP {response.status_code})")
+                        with st.expander("🔍 Error Details"):
+                            st.code(response.text)
+
+            except requests.exceptions.Timeout:
+                # Clear progress and status
+                status_placeholder.empty()
+                progress_placeholder.empty()
+
+                st.error("❌ Request timed out after 2 minutes")
+                st.warning("This may happen with multiple emails and replies. The emails might still be sending in the background.")
+                st.info("💡 Check API logs with: `docker compose -f docker/docker-compose.prod.yml logs api`")
+
+            except requests.exceptions.ConnectionError:
+                # Clear progress and status
+                status_placeholder.empty()
+                progress_placeholder.empty()
+
+                st.error("❌ Cannot connect to API")
+                st.warning(f"Make sure the API is running at {API_BASE_URL}")
+                st.info("💡 Check API status with: `docker compose -f docker/docker-compose.prod.yml ps api`")
+
+            except Exception as e:
+                # Clear progress and status
+                status_placeholder.empty()
+                progress_placeholder.empty()
+
+                st.error(f"❌ Unexpected error: {str(e)}")
+                with st.expander("🔍 Error Details"):
+                    st.code(str(e))
 
     st.markdown("---")
 
@@ -1032,10 +1143,13 @@ elif page == "🧪 Quick Test":
     - ✅ Check email delivery and inbox placement
     - ✅ Validate sender/receiver interactions
     - ✅ Test automatic replies from receivers (optional)
+    - ✅ Test emails in multiple languages (English/Italian)
 
     **Note:** Test emails are sent immediately and **do not** count towards warming campaign metrics.
 
     **Auto-replies:** When enabled, receivers will automatically reply to test emails after 2 seconds, simulating real email conversations.
+
+    **Language:** Choose between English (🇬🇧) or Italian (🇮🇹) for AI-generated content. Both the initial email and auto-replies will use the selected language.
     """)
 
 
@@ -1716,7 +1830,7 @@ elif page == "⚙️ Settings":
             st.metric("API Status", "🟢 Online" if check_api_health() else "🔴 Offline")
 
         with col_b:
-            st.metric("API URL", API_BASE_URL)
+            st.metric("API URL", "http://localhost:8000")
 
         with col_c:
             italy_tz = ZoneInfo("Europe/Rome")
@@ -1737,7 +1851,19 @@ with col3:
     now_italy = datetime.now(italy_tz)
     st.caption("🔄 Last updated: " + now_italy.strftime("%H:%M:%S"))
 
-# Auto-refresh
+# Auto-refresh with proper implementation
 if auto_refresh:
-    time.sleep(30)
-    st.rerun()
+    # Use st.empty() placeholder to avoid stacking
+    import streamlit.components.v1 as components
+
+    # JavaScript-based refresh that reloads the page cleanly
+    components.html(
+        """
+        <script>
+        setTimeout(function() {
+            window.parent.location.reload();
+        }, 30000);  // 30 seconds
+        </script>
+        """,
+        height=0
+    )

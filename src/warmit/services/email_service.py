@@ -50,8 +50,13 @@ class EmailMessage:
             msg["References"] = self.references
 
         # Add body as plain text
-        text_part = MIMEText(self.body, "plain")
+        text_part = MIMEText(self.body, "plain", "utf-8")
         msg.attach(text_part)
+
+        # Add body as HTML (converts newlines to <br>)
+        html_body = self.body.replace("\n", "<br>\n")
+        html_part = MIMEText(f"<html><body>{html_body}</body></html>", "html", "utf-8")
+        msg.attach(html_part)
 
         return msg
 
@@ -108,8 +113,8 @@ class EmailService:
                     port=smtp_port,
                     username=username,
                     password=password,
-                    use_tls=use_tls,
-                    start_tls=use_tls,  # STARTTLS for port 587
+                    use_tls=False,  # Don't wrap connection in TLS
+                    start_tls=use_tls,  # Use STARTTLS instead
                 )
 
             logger.info(f"Email sent successfully: {message.subject}")
@@ -324,8 +329,8 @@ class EmailService:
                 smtp = aiosmtplib.SMTP(
                     hostname=smtp_host,
                     port=smtp_port,
-                    use_tls=smtp_use_tls,
-                    start_tls=smtp_use_tls,
+                    use_tls=False,  # Don't wrap connection in TLS
+                    start_tls=smtp_use_tls,  # Use STARTTLS instead
                 )
             await smtp.connect()
             await smtp.login(username, password)

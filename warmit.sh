@@ -2,6 +2,9 @@
 
 # WarmIt - One-Click Production Startup Script
 # This script starts WarmIt in production mode with all failsafe features
+#
+# Developed with ❤️ by Givaa
+# https://github.com/Givaa
 
 set -e
 
@@ -83,16 +86,19 @@ if [ "$1" == "reset" ]; then
     echo "  - All email accounts"
     echo "  - All campaigns"
     echo "  - All metrics and history"
-    echo "  - Database and Redis data"
+    echo "  - Database and Redis data (including volumes)"
+    echo "  - All Docker containers and networks"
     echo ""
     read -p "Are you ABSOLUTELY SURE? Type 'DELETE' to confirm: " -r
     echo
     if [[ $REPLY == "DELETE" ]]; then
-        echo "Stopping containers..."
+        echo "Stopping and removing containers..."
         $DOCKER_COMPOSE -f $COMPOSE_FILE down -v
-        echo -e "${GREEN}✅ All data deleted${NC}"
+
         echo ""
-        echo "Run './warmit.sh' to start fresh"
+        echo -e "${GREEN}✅ All data deleted (containers, volumes, networks)${NC}"
+        echo ""
+        echo "To start fresh, run: ./warmit.sh"
     else
         echo "Cancelled"
     fi
@@ -176,6 +182,54 @@ else
     fi
 fi
 
+# Verify ENCRYPTION_KEY is configured (CRITICAL for data security)
+ENCRYPTION_KEY=$(grep "^ENCRYPTION_KEY=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'' | sed 's/#.*//')
+
+if [ -z "$ENCRYPTION_KEY" ] || [ "$ENCRYPTION_KEY" = "your_encryption_key_here" ]; then
+    echo ""
+    echo -e "${YELLOW}⚠️  ENCRYPTION_KEY not configured - generating one now...${NC}"
+    echo ""
+
+    # Generate encryption key using Docker with pip install
+    echo "Generating secure encryption key using Docker..."
+    GENERATED_KEY=$(docker run --rm python:3.11-slim bash -c "pip install -q cryptography && python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"" 2>/dev/null)
+
+    if [ -z "$GENERATED_KEY" ]; then
+        echo -e "${RED}❌ Failed to generate encryption key with Docker${NC}"
+        echo ""
+        echo "Trying alternative method (OpenSSL)..."
+
+        # Fallback: Generate a base64-encoded 32-byte key using OpenSSL (compatible with Fernet)
+        GENERATED_KEY=$(openssl rand -base64 32 2>/dev/null)
+
+        if [ -z "$GENERATED_KEY" ]; then
+            echo -e "${RED}❌ Failed to generate encryption key${NC}"
+            echo ""
+            echo "Please add ENCRYPTION_KEY manually to docker/.env"
+            echo "You can generate one at: https://fernet-generator.fly.dev/"
+            echo "Or run: docker run --rm python:3.11-slim bash -c 'pip install cryptography && python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"'"
+            exit 1
+        fi
+    fi
+
+    # Add to .env file
+    echo "" >> "$ENV_FILE"
+    echo "# Auto-generated encryption key (DO NOT CHANGE OR LOSE THIS!)" >> "$ENV_FILE"
+    echo "ENCRYPTION_KEY=$GENERATED_KEY" >> "$ENV_FILE"
+
+    echo ""
+    echo -e "${GREEN}✅ Encryption key generated and saved to docker/.env${NC}"
+    echo ""
+    echo -e "${YELLOW}🔑 Your encryption key: $GENERATED_KEY${NC}"
+    echo ""
+    echo -e "${RED}⚠️  IMPORTANT: This key is now saved in docker/.env${NC}"
+    echo -e "${RED}⚠️  DO NOT LOSE THIS KEY or you won't be able to decrypt your passwords!${NC}"
+    echo -e "${RED}⚠️  DO NOT CHANGE THIS KEY or existing passwords will become unreadable!${NC}"
+    echo ""
+    read -p "Press Enter to continue..."
+else
+    echo -e "${GREEN}✅ Encryption key configured${NC}"
+fi
 
 # Verify API key is configured
 AI_PROVIDER=$(grep "^AI_PROVIDER=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'' | sed 's/#.*//')
@@ -304,3 +358,4 @@ echo "  3. Create a warming campaign"
 echo "  4. Monitor progress!"
 echo ""
 echo -e "${GREEN}Happy warming! 🔥${NC}"
+echo ""

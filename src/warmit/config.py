@@ -81,7 +81,7 @@ class Settings(BaseSettings):
         # OpenRouter keys
         if self.openrouter_api_key:
             configs.append({
-                "provider": "openrouter",
+                "provider": "openrouter_1",
                 "api_key": self.openrouter_api_key,
                 "base_url": "https://openrouter.ai/api/v1",
                 "model": self.ai_model,
@@ -104,7 +104,7 @@ class Settings(BaseSettings):
         # Groq keys
         if self.groq_api_key:
             configs.append({
-                "provider": "groq",
+                "provider": "groq_1",
                 "api_key": self.groq_api_key,
                 "base_url": "https://api.groq.com/openai/v1",
                 "model": self.groq_model,
@@ -120,7 +120,7 @@ class Settings(BaseSettings):
         # OpenAI key
         if self.openai_api_key:
             configs.append({
-                "provider": "openai",
+                "provider": "openai_1",
                 "api_key": self.openai_api_key,
                 "base_url": "https://api.openai.com/v1",
                 "model": self.openai_model,

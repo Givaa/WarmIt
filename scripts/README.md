@@ -78,6 +78,29 @@ python scripts/migrate_encrypt_passwords.py
 
 ---
 
+## 📂 migrations/
+SQL migration scripts for database schema changes.
+
+**Directory:** `scripts/migrations/`
+
+**Purpose:** Version-controlled database migrations
+
+**Available migrations:**
+- `001_add_campaign_language.sql` - Adds language field to campaigns table
+
+**Documentation:** See [migrations/README.md](migrations/README.md) for details
+
+**How to apply:**
+```bash
+# Migrations are auto-applied on container startup
+./warmit.sh restart
+
+# Or apply manually
+docker compose -f docker/docker-compose.prod.yml exec -T postgres \
+  psql -U warmit -d warmit < scripts/migrations/XXX_migration.sql
+```
+
+---
 
 ### 🐕 watchdog.py
 Container health monitoring service (runs inside Docker).
@@ -311,4 +334,4 @@ export ENCRYPTION_KEY="your-fernet-key"
 ---
 
 **Last Updated:** 2026-01-15
-**WarmIt Version:** 0.2.0-dev
+**WarmIt Version:** 0.2.1-dev (Multilingual Support)

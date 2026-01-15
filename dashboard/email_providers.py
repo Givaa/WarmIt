@@ -19,7 +19,17 @@ EMAIL_PROVIDERS = {
         "imap_host": "outlook.office365.com",
         "imap_port": 993,
         "imap_use_ssl": True,
-        "notes": "Use your regular password or App Password if 2FA is enabled."
+        "notes": "IMPORTANT: Basic authentication disabled by Microsoft. Generate App Password: Account Settings > Security > Advanced Security Options > App Passwords."
+    },
+    "outlook.it": {
+        "name": "Outlook.com / Hotmail",
+        "smtp_host": "smtp-mail.outlook.com",
+        "smtp_port": 587,
+        "smtp_use_tls": True,
+        "imap_host": "outlook.office365.com",
+        "imap_port": 993,
+        "imap_use_ssl": True,
+        "notes": "IMPORTANT: Basic authentication disabled by Microsoft. Generate App Password: Account Settings > Security > Advanced Security Options > App Passwords."
     },
     "hotmail.com": {
         "name": "Outlook.com / Hotmail",
@@ -29,7 +39,7 @@ EMAIL_PROVIDERS = {
         "imap_host": "outlook.office365.com",
         "imap_port": 993,
         "imap_use_ssl": True,
-        "notes": "Use your regular password or App Password if 2FA is enabled."
+        "notes": "IMPORTANT: Basic authentication disabled by Microsoft. Generate App Password: Account Settings > Security > Advanced Security Options > App Passwords."
     },
     "live.com": {
         "name": "Outlook.com / Hotmail",
@@ -39,7 +49,7 @@ EMAIL_PROVIDERS = {
         "imap_host": "outlook.office365.com",
         "imap_port": 993,
         "imap_use_ssl": True,
-        "notes": "Use your regular password or App Password if 2FA is enabled."
+        "notes": "IMPORTANT: Basic authentication disabled by Microsoft. Generate App Password: Account Settings > Security > Advanced Security Options > App Passwords."
     },
     "yahoo.com": {
         "name": "Yahoo Mail",
@@ -109,7 +119,7 @@ EMAIL_PROVIDERS = {
         "imap_host": "outlook.office365.com",
         "imap_port": 993,
         "imap_use_ssl": True,
-        "notes": "For business/enterprise accounts. May require App Password with Modern Auth."
+        "notes": "IMPORTANT: Basic authentication disabled by Microsoft. Generate App Password: Account Settings > Security > Advanced Security Options > App Passwords."
     },
     "icloud.com": {
         "name": "iCloud Mail",
