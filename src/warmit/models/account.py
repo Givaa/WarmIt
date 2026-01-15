@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional
-from sqlalchemy import String, Integer, Boolean, Enum as SQLEnum, DateTime
+from sqlalchemy import String, Integer, Boolean, Enum as SQLEnum, DateTime, event
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from warmit.models.base import Base, TimestampMixin
 
@@ -30,6 +30,10 @@ class Account(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
 
+    # Personal information
+    first_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    last_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
     # Account type and status
     type: Mapped[AccountType] = mapped_column(SQLEnum(AccountType), nullable=False)
     status: Mapped[AccountStatus] = mapped_column(
@@ -48,8 +52,9 @@ class Account(Base, TimestampMixin):
     imap_port: Mapped[int] = mapped_column(Integer, default=993, nullable=False)
     imap_use_ssl: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    # Credentials (should be encrypted in production)
-    password: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Credentials (encrypted at rest)
+    # Note: This column stores encrypted passwords. Use _plaintext_password for in-memory plaintext.
+    password: Mapped[str] = mapped_column(String(500), nullable=False)  # Increased size for encrypted data
 
     # Domain information
     domain: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -87,6 +92,17 @@ class Account(Base, TimestampMixin):
     )
 
     @property
+    def full_name(self) -> str:
+        """Get full name or email username as fallback."""
+        if self.first_name and self.last_name:
+            return f"{self.first_name} {self.last_name}"
+        elif self.first_name:
+            return self.first_name
+        else:
+            # Fallback to email username
+            return self.email.split('@')[0].replace('.', ' ').replace('_', ' ').title()
+
+    @property
     def bounce_rate(self) -> float:
         """Calculate bounce rate."""
         if self.total_sent == 0:
@@ -107,5 +123,48 @@ class Account(Base, TimestampMixin):
             return 0.0
         return self.total_replied / self.total_received
 
+    def get_password(self) -> str:
+        """Get decrypted password.
+
+        Returns:
+            Plain text password
+        """
+        from warmit.services.encryption import decrypt_password
+        return decrypt_password(self.password)
+
+    def set_password(self, plaintext_password: str) -> None:
+        """Set password (will be encrypted).
+
+        Args:
+            plaintext_password: Plain text password to encrypt and store
+        """
+        from warmit.services.encryption import encrypt_password
+        self.password = encrypt_password(plaintext_password)
+
     def __repr__(self) -> str:
         return f"<Account(email={self.email}, type={self.type}, status={self.status})>"
+
+
+# SQLAlchemy events for automatic encryption/decryption
+@event.listens_for(Account, "before_insert")
+@event.listens_for(Account, "before_update")
+def encrypt_password_on_save(mapper, connection, target):
+    """Encrypt password before saving to database."""
+    from warmit.services.encryption import encrypt_password
+
+    # Check if password looks like plaintext (not already encrypted)
+    # Fernet encrypted strings start with 'gAAAAA' when base64 encoded
+    if target.password and not target.password.startswith('gAAAAA'):
+        target.password = encrypt_password(target.password)
+
+
+@event.listens_for(Account, "load")
+def decrypt_password_on_load(target, context):
+    """Decrypt password after loading from database."""
+    from warmit.services.encryption import decrypt_password
+
+    # Decrypt password on load
+    if target.password:
+        decrypted = decrypt_password(target.password)
+        # Store decrypted password in a private attribute for in-memory use
+        target._plaintext_password = decrypted

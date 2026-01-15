@@ -197,13 +197,14 @@ class ResponseBot:
                 logger.warning(f"Sender account not found: {sender_email}")
                 return False
 
-            # Generate reply content
+            # Generate reply content with receiver's name
             original_subject = email_data.get("subject", "")
             original_body = email_data.get("body", "")
 
             reply_content = await self.ai_generator.generate_email(
                 is_reply=True,
                 previous_content=f"Subject: {original_subject}\n\n{original_body}",
+                sender_name=account.full_name,
             )
 
             # Create reply message

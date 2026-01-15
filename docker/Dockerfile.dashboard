@@ -2,16 +2,33 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including Poetry
 RUN apt-get update && apt-get install -y \
     curl \
+    build-essential \
+    && curl -sSL https://install.python-poetry.org | python3 - \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency files
-COPY requirements.txt ./
+# Add Poetry to PATH
+ENV PATH="/root/.local/bin:$PATH"
 
-# Install Python dependencies with pip
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy dependency files first for better caching
+COPY pyproject.toml ./
+
+# Install Python packages using Poetry
+# --no-root: don't install the project itself yet
+# --only main: only install main dependencies, not dev
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-root --only main \
+    && apt-get remove -y build-essential \
+    && apt-get autoremove -y \
+    && rm -rf /root/.cache
+
+# Copy application code (needed for warmit.services imports)
+COPY src/warmit/ ./warmit/
+
+# Copy scripts (needed for estimate_resources import)
+COPY scripts/ ./scripts/
 
 # Copy dashboard code
 COPY dashboard/ ./dashboard/

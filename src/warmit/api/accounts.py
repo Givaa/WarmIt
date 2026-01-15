@@ -20,6 +20,8 @@ class AccountCreate(BaseModel):
     """Schema for creating an account."""
 
     email: EmailStr
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     type: AccountType
     smtp_host: str
     smtp_port: int = 587
@@ -46,6 +48,8 @@ class AccountResponse(BaseModel):
 
     id: int
     email: str
+    first_name: Optional[str]
+    last_name: Optional[str]
     type: AccountType
     status: AccountStatus
     domain: Optional[str]
@@ -106,6 +110,8 @@ async def create_account(
     # Create account
     account = Account(
         email=account_data.email,
+        first_name=account_data.first_name,
+        last_name=account_data.last_name,
         type=account_data.type,
         status=AccountStatus.ACTIVE,
         smtp_host=account_data.smtp_host,
@@ -117,10 +123,13 @@ async def create_account(
         password=account_data.password,
     )
 
-    # Check domain age for sender accounts
+    # Extract domain from email for all accounts
+    domain = account_data.email.split('@')[1] if '@' in account_data.email else None
+    account.domain = domain
+
+    # Check domain age only for sender accounts
     if account_data.type == AccountType.SENDER:
         domain_info = await DomainChecker.check_domain(account_data.email)
-        account.domain = domain_info.domain
         account.domain_age_days = domain_info.age_days
         account.domain_checked_at = datetime.now(timezone.utc)
         account.current_daily_limit = domain_info.initial_daily_limit

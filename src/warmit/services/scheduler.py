@@ -297,8 +297,8 @@ class WarmupScheduler:
                 # Pick random receiver
                 receiver = random.choice(receivers)
 
-                # Generate email content
-                content = await self.ai_generator.generate_email()
+                # Generate email content with sender's name
+                content = await self.ai_generator.generate_email(sender_name=sender.full_name)
 
                 # Create message
                 message = EmailMessage(

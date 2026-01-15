@@ -1,0 +1,79 @@
+# WarmIt Configuration Profile: ENTERPRISE
+# Recommended for: 200+ sender accounts
+# Use case: Large enterprises, email service providers
+
+name: "enterprise"
+description: "Enterprise scale deployment for 200+ accounts"
+max_senders: 1000
+max_receivers: 1000
+
+# Resource limits
+resources:
+  ram_mb: 16384  # 16GB
+  cpu_cores: 8.0
+  storage_gb: 200
+
+# Email volume
+email_volume:
+  min_emails_per_day: 5
+  max_emails_per_day: 150
+  warmup_duration_weeks: 12
+  response_delay_min_hours: 1
+  response_delay_max_hours: 24
+
+# Workers
+workers:
+  celery_workers: 16
+  celery_concurrency: 32
+  max_tasks_per_child: 500
+
+# Database
+database:
+  pool_size: 100
+  max_overflow: 50
+  pool_timeout: 30
+  pool_recycle: 1800
+
+# Safety
+safety:
+  max_bounce_rate: 0.02
+  auto_pause_on_high_bounce: true
+  max_daily_sends_per_account: 150
+
+# API rate limiting
+api_limits:
+  # Enterprise API keys
+  openrouter_rpm: 500  # Enterprise tier
+  openrouter_rpd: 100000  # Enterprise tier
+
+  groq_rpm: 500  # Enterprise tier
+  groq_rpd: 100000  # Enterprise tier
+
+  rate_limit_buffer: 0.95  # Higher confidence with enterprise tier
+
+  max_retries: 5
+  retry_delay_seconds: 0.5
+  backoff_factor: 1.5
+
+# Monitoring
+monitoring:
+  metrics_retention_days: 365
+  log_level: "INFO"
+  enable_performance_tracking: true
+  enable_cost_tracking: true
+  enable_alerts: true
+  alert_threshold_percentage: 75
+  enable_predictive_analytics: true
+
+# Recommendations
+recommendations:
+  - "PostgreSQL cluster with high availability required"
+  - "Use enterprise API tier with SLA"
+  - "Multiple API keys with automatic rotation"
+  - "Dedicated infrastructure (Kubernetes recommended)"
+  - "Full monitoring stack (Prometheus + Grafana + AlertManager)"
+  - "24/7 admin notifications"
+  - "Automated backup and disaster recovery"
+  - "Load balancing across multiple instances"
+  - "CDN for dashboard if public-facing"
+  - "Security audit and penetration testing"

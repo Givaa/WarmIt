@@ -10,35 +10,46 @@
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (5 minutes)
 
 ```bash
 # 1. Clone
 git clone https://github.com/Givaa/warmit.git
 cd warmit
 
-# 2. Start (it will guide you through configuration)
-./start.sh
+# 2. Generate encryption key
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
-# The script will:
-# - Create docker/.env from template
-# - Prompt you to add your API key
-# - Start all services automatically
+# 3. Configure environment
+cp .env.example docker/.env
+# Edit docker/.env:
+# - Add your API keys (OpenRouter/Groq)
+# - Add ENCRYPTION_KEY from step 2
+
+# 4. Start services
+./warmit.sh start
+
+# 5. Get admin password
+docker logs warmit-dashboard | grep "Admin Password"
 ```
-
-**First time setup:**
-1. Run `./start.sh`
-2. Edit `docker/.env` when prompted
-3. Add your OpenRouter or Groq API key
-4. Press Enter to continue
 
 **That's it!** ✨
 
 **Access:**
-- 📊 Dashboard: http://localhost:8501
-- 📝 Logs (Web): http://localhost:8888
-- 🔌 API: http://localhost:8000
-- 📖 Docs: http://localhost:8000/docs
+- 📊 **Dashboard:** http://localhost:8501 (login with admin password)
+- 📝 **Logs:** http://localhost:8888
+- 🔌 **API:** http://localhost:8000
+- 📖 **API Docs:** http://localhost:8000/docs
+
+**Management:**
+```bash
+./warmit.sh start     # Start all services
+./warmit.sh stop      # Stop all services
+./warmit.sh restart   # Restart all services
+./warmit.sh logs      # View logs
+./warmit.sh down      # Stop and remove containers
+./warmit.sh reset     # Full reset (WARNING: deletes data)
+```
 
 ---
 
@@ -72,28 +83,49 @@ WarmIt automatically:
 
 ## 🎯 Key Features
 
-### Core
-- ✅ Multi-account warming
-- ✅ AI content generation (OpenRouter/Groq)
-- ✅ Progressive volume scheduling
-- ✅ Auto-response system
-- ✅ Domain age analysis
+### 🔥 Core Email Warming
+- ✅ Multi-account warming (unlimited scale)
+- ✅ AI content generation (OpenRouter/Groq/OpenAI)
+- ✅ Multiple API keys with automatic fallback
+- ✅ Local template generation (42,875+ combinations)
+- ✅ Progressive volume scheduling (5 → 80 emails/day)
+- ✅ Auto-response system with human-like timing
+- ✅ Domain age analysis (WHOIS/RDAP)
 - ✅ **Auto-configuration for 20+ email providers**
 
-### Enterprise
+### 🔐 Security & Infrastructure
+- ✅ **Dashboard authentication** (auto-generated passwords)
+- ✅ **Database encryption** (Fernet, automatic encrypt/decrypt)
+- ✅ PostgreSQL default (production-ready)
+- ✅ Secure credential storage
+- ✅ Password change UI
+- ✅ Session-based auth
+
+### 📊 Planning & Monitoring
+- ✅ **Resource estimation tool** (CLI + Dashboard)
+- ✅ **Dynamic configuration profiles** (Small/Medium/Large/Enterprise)
+- ✅ **API cost & rate limit dashboard** (real-time tracking)
+- ✅ Saturation forecasting (know when limits will be hit)
+- ✅ Docker Compose config generator
+- ✅ Optimization recommendations
+
+### 🏢 Enterprise Features
 - ✅ Web dashboard (Streamlit)
 - ✅ Auto-restart on failure
 - ✅ Health monitoring (30s checks)
 - ✅ Watchdog auto-recovery (5min)
 - ✅ Resource limits & log rotation
 - ✅ Data persistence (PostgreSQL + Redis)
+- ✅ Multi-worker support (Celery)
 
-### Analytics
+### 📈 Analytics
 - ✅ Real-time metrics
 - ✅ Interactive charts (Plotly)
 - ✅ Per-account tracking
+- ✅ Per-campaign tracking
 - ✅ 30-day history
 - ✅ Open/Reply/Bounce rates
+- ✅ API usage tracking
 
 ---
 
@@ -123,15 +155,6 @@ IMAP: imapmail.libero.it:993 ✓
 - **Gmail**: "Use App Password. Enable 2FA first, then create in Google Account settings"
 - **Aruba**: "Port 465 with SSL (not 587 TLS). For PEC use pec.aruba.it"
 - **Yahoo**: "Generate App Password in Account Security"
-
----
-
-## 📖 Documentation
-
-| Doc | Description |
-|-----|-------------|
-| [Architecture](docs/ARCHITECTURE.md) | System design & components |
-| [FAQ](docs/FAQ.md) | Troubleshooting & common issues |
 
 ---
 
@@ -207,11 +230,21 @@ Dashboard (8501) ──► API (8000) ──► PostgreSQL
 
 ## 📚 Documentation
 
-- [Quick Start Guide](docs/QUICKSTART.md) - Detailed setup instructions
-- [Architecture](docs/ARCHITECTURE.md) - System architecture and components
-- [System Requirements](docs/SYSTEM_REQUIREMENTS.md) - Hardware and software requirements
-- [FAQ](docs/FAQ.md) - Frequently asked questions
-- [Utility Scripts](scripts/README.md) - Maintenance and debugging tools
+**Getting Started:**
+- 📖 [Complete Documentation Index](docs/README.md) - All guides in one place
+- 🔐 [Security Setup Guide](docs/SECURITY_SETUP.md) - Authentication & encryption
+- 🧮 [Resource Estimation](docs/RESOURCE_ESTIMATION.md) - Campaign planning tool
+
+**Project Files:**
+- 🗺️ [Project Structure](PROJECT_STRUCTURE.md) - Complete codebase map
+- 📋 [Changelog](CHANGELOG.md) - Version history and changes
+- 📝 [TODO](TODO.md) - Roadmap and future features
+- 🔧 [Scripts Documentation](scripts/README.md) - Utility scripts guide
+
+**Configuration:**
+- ⚙️ [Environment Variables](.env.example) - All configuration options
+- 📋 [Configuration Profiles](config/profiles/) - Small/Medium/Large/Enterprise presets
+- 🐳 [Docker Compose](docker/docker-compose.prod.yml) - Production deployment
 
 ---
 
@@ -221,17 +254,4 @@ MIT License - see [LICENSE](LICENSE)
 
 ---
 
-## 🙏 Acknowledgments
-
-- [FastAPI](https://fastapi.tiangolo.com/)
-- [Streamlit](https://streamlit.io/)
-- [Celery](https://docs.celeryq.dev/)
-- [OpenRouter](https://openrouter.ai)
-- [Groq](https://groq.com)
-
----
-
-<p align="center">
-  <strong>⭐ Star this repo if you find it useful!</strong><br/>
-  Made with ❤️ by <a href="https://github.com/Givaa">Givaa</a>
-</p>
+**Last Updated:** 2026-01-15 | **Version:** 0.2.0

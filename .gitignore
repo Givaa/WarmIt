@@ -39,14 +39,21 @@ wheels/
 *.swo
 *~
 
-# Testing
+# Testing & Linting
 .pytest_cache/
 .coverage
 htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 # Logs
 *.log
 logs/
+
+# Authentication
+dashboard/.auth
+dashboard/.sessions
+dashboard/first_run_password.txt
 
 # OS
 .DS_Store

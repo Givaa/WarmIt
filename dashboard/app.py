@@ -8,7 +8,17 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import time
 import os
+from zoneinfo import ZoneInfo
 from email_providers import get_provider_config, get_all_providers, get_provider_by_name
+from auth import (check_auth, get_or_create_password, change_password,
+                  create_session_token, save_session, validate_session, delete_session)
+import logging
+import sys
+from pathlib import Path
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Configuration - Use environment variable for Docker, fallback to localhost for local dev
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
@@ -21,9 +31,121 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Initialize password on first run (before any UI)
+password_hash, is_new = get_or_create_password()
+
+# Initialize session state for authentication
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+if 'session_token' not in st.session_state:
+    st.session_state.session_token = None
+
+# Try to restore session from query params (persistent across reloads)
+query_params = st.query_params
+if not st.session_state.authenticated:
+    # Check query params first
+    if 'session' in query_params:
+        token = query_params['session']
+        if validate_session(token):
+            st.session_state.authenticated = True
+            st.session_state.session_token = token
+            logger.info("✅ Session restored from query params")
+    # Fallback to session_state token
+    elif st.session_state.session_token:
+        if validate_session(st.session_state.session_token):
+            st.session_state.authenticated = True
+            # Add to query params for persistence
+            st.query_params['session'] = st.session_state.session_token
+            logger.info("✅ Session restored from token")
+
+# Authentication check - show login page if not authenticated
+if not st.session_state.authenticated:
+    # Hide sidebar completely during login
+    st.markdown("""
+        <style>
+            [data-testid="stSidebar"] {
+                display: none;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('<h1 style="text-align: center;">🔥 WarmIt Dashboard</h1>', unsafe_allow_html=True)
+    st.markdown("---")
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+
+    with col2:
+        st.subheader("🔐 Login Required")
+
+        if is_new:
+            st.success("✅ First time setup! Admin password generated.")
+            st.info("🔑 Check the application logs for your admin password.")
+            st.warning("⚠️ The password is also saved in `dashboard/first_run_password.txt` and will be deleted after first login.")
+
+        with st.form("login_form"):
+            password_input = st.text_input(
+                "Admin Password",
+                type="password",
+                placeholder="Enter your admin password"
+            )
+
+            submit = st.form_submit_button("🔓 Login", use_container_width=True, type="primary")
+
+            if submit:
+                if password_input:
+                    if check_auth(password_input):
+                        # Create and save session token
+                        session_token = create_session_token()
+                        save_session(session_token)
+
+                        # Update session state and query params
+                        st.session_state.authenticated = True
+                        st.session_state.session_token = session_token
+                        st.query_params['session'] = session_token
+
+                        st.success("✅ Login successful! Session will last 7 days.")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ Incorrect password")
+                else:
+                    st.error("⚠️ Please enter a password")
+
+        st.markdown("---")
+        st.caption("💡 **First time?** Check logs for generated password")
+        st.caption("📁 Logs location: `docker/logs/dashboard.log` or console output")
+
+    st.stop()
+
 # Custom CSS
 st.markdown("""
 <style>
+    /* Hide Streamlit's loading spinner */
+    .stSpinner {
+        display: none !important;
+    }
+
+    /* Hide the swimming person animation at top-left */
+    [data-testid="stStatusWidget"] {
+        display: none !important;
+    }
+
+    /* Prevent transparency/darkening on rerun */
+    .stApp {
+        transition: none !important;
+    }
+
+    /* Force clean page rendering */
+    .main .block-container {
+        max-width: 100%;
+        padding-top: 1rem;
+    }
+
+    /* Clear content between reruns */
+    .element-container {
+        animation: none !important;
+    }
+
     .main-header {
         font-size: 3rem;
         font-weight: bold;
@@ -164,8 +286,13 @@ def update_account_status(account_id, status):
 def process_campaign(campaign_id):
     """Manually trigger campaign processing."""
     try:
-        response = requests.post(f"{API_BASE_URL}/api/campaigns/{campaign_id}/process")
+        response = requests.post(
+            f"{API_BASE_URL}/api/campaigns/{campaign_id}/process",
+            timeout=60  # 60 second timeout for processing
+        )
         return response.ok, response.json() if response.ok else response.text
+    except requests.exceptions.Timeout:
+        return False, "Request timed out. Check API logs for campaign status."
     except Exception as e:
         return False, str(e)
 
@@ -186,10 +313,10 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Navigation
+    # Navigation (only shown when authenticated)
     page = st.radio(
         "Navigation",
-        ["📊 Dashboard", "📧 Accounts", "🎯 Campaigns", "📈 Analytics", "➕ Add New"],
+        ["📊 Dashboard", "📧 Accounts", "🎯 Campaigns", "📈 Analytics", "➕ Add New", "🧪 Quick Test", "🧮 Estimate", "💰 API Costs", "⚙️ Settings"],
         label_visibility="collapsed"
     )
 
@@ -200,10 +327,30 @@ with st.sidebar:
     if auto_refresh:
         st.info("Dashboard refreshes every 30 seconds")
 
+# Force clean page rendering by clearing DOM
+st.markdown(f"""
+<script>
+// Force clean render on page change - key by page name
+window.currentPage = '{page}';
+if (window.lastPage !== window.currentPage) {{
+    console.log('Page changed from', window.lastPage, 'to', window.currentPage);
+    window.lastPage = window.currentPage;
+}}
+</script>
+<style>
+/* Hide all page content by default, show only current */
+.main .block-container > div {{
+    display: none !important;
+}}
+.main .block-container > div:last-child {{
+    display: block !important;
+}}
+</style>
+""", unsafe_allow_html=True)
 
 # Main content
 if page == "📊 Dashboard":
-    st.markdown('<h1 class="main-header">🔥 WarmIt Dashboard</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 style="text-align: center;">🔥 WarmIt Dashboard</h1>', unsafe_allow_html=True)
 
     # Fetch data
     metrics = get_system_metrics()
@@ -657,12 +804,25 @@ elif page == "➕ Add New":
                         if success:
                             st.success(f"✅ Account created successfully!")
                             if isinstance(result, dict):
-                                st.json(result)
-                            # Reset form
-                            st.session_state.form_email = ""
-                            st.session_state.form_config = get_provider_config("")
-                            time.sleep(2)
-                            st.rerun()
+                                # Show account details
+                                st.write("**Account Details:**")
+                                col_info1, col_info2 = st.columns(2)
+                                with col_info1:
+                                    st.write(f"📧 Email: `{result.get('email')}`")
+                                    st.write(f"🏷️ Type: `{result.get('type')}`")
+                                    st.write(f"✅ Status: `{result.get('status')}`")
+                                with col_info2:
+                                    if result.get('domain'):
+                                        st.write(f"🌐 Domain: `{result.get('domain')}`")
+                                    if result.get('domain_age_days') is not None:
+                                        st.write(f"📅 Domain Age: `{result.get('domain_age_days')} days`")
+                                    st.write(f"📊 Daily Limit: `{result.get('current_daily_limit')}`")
+
+                                # Show expandable raw JSON
+                                with st.expander("View raw API response"):
+                                    st.json(result)
+
+                            st.info("💡 Go to **'📧 Accounts'** page to view all accounts, or add another account below.")
                         else:
                             st.error(f"❌ Failed to create account: {result}")
 
@@ -719,11 +879,849 @@ elif page == "➕ Add New":
                         if success:
                             st.success("✅ Campaign created successfully!")
                             if isinstance(result, dict):
-                                st.json(result)
-                            time.sleep(2)
-                            st.rerun()
+                                # Show campaign details
+                                st.write("**Campaign Details:**")
+                                col_c1, col_c2 = st.columns(2)
+                                with col_c1:
+                                    st.write(f"📛 Name: `{result.get('name')}`")
+                                    st.write(f"✅ Status: `{result.get('status')}`")
+                                    st.write(f"📅 Duration: `{result.get('duration_weeks')} weeks`")
+                                with col_c2:
+                                    st.write(f"📧 Senders: `{len(result.get('sender_account_ids', []))}`")
+                                    st.write(f"📬 Receivers: `{len(result.get('receiver_account_ids', []))}`")
+                                    st.write(f"📊 Week: `{result.get('current_week')}/{result.get('duration_weeks')}`")
+
+                                # Show expandable raw JSON
+                                with st.expander("View raw API response"):
+                                    st.json(result)
+
+                            st.info("💡 Go to **'🎯 Campaigns'** page to monitor progress, or create another campaign below.")
                         else:
                             st.error(f"❌ Failed to create campaign: {result}")
+
+
+elif page == "🧪 Quick Test":
+    st.title("🧪 Quick Email Test")
+    st.markdown("Send test emails immediately to verify account configurations and email generation.")
+
+    accounts = get_accounts()
+    senders = [a for a in accounts if a.get('type') == 'sender' and a.get('status') == 'active']
+    receivers = [a for a in accounts if a.get('type') == 'receiver' and a.get('status') == 'active']
+
+    if not senders or not receivers:
+        st.warning("⚠️ You need at least 1 active sender and 1 active receiver to run tests.")
+        if not senders:
+            st.info("Add a sender account in **'➕ Add New'** → **'📧 Add Account'**")
+        if not receivers:
+            st.info("Add a receiver account in **'➕ Add New'** → **'📧 Add Account'**")
+        st.stop()
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("📤 Select Sender")
+        sender_id = st.selectbox(
+            "Sender Account",
+            options=[s['id'] for s in senders],
+            format_func=lambda x: next(s['email'] for s in senders if s['id'] == x)
+        )
+        sender = next(s for s in senders if s['id'] == sender_id)
+
+        st.info(f"**Email:** {sender['email']}\n\n**Domain:** {sender.get('domain', 'N/A')}\n\n**Daily Limit:** {sender.get('current_daily_limit')}")
+
+    with col2:
+        st.subheader("📥 Select Receiver")
+        receiver_id = st.selectbox(
+            "Receiver Account",
+            options=[r['id'] for r in receivers],
+            format_func=lambda x: next(r['email'] for r in receivers if r['id'] == x)
+        )
+        receiver = next(r for r in receivers if r['id'] == receiver_id)
+
+        st.info(f"**Email:** {receiver['email']}\n\n**Domain:** {receiver.get('domain', 'N/A')}")
+
+    st.markdown("---")
+
+    # Test options
+    col_a, col_b, col_c = st.columns(3)
+
+    with col_a:
+        num_emails = st.number_input(
+            "Number of test emails",
+            min_value=1,
+            max_value=10,
+            value=1,
+            help="Send multiple test emails in sequence"
+        )
+
+    with col_b:
+        include_replies = st.checkbox(
+            "Auto-reply from receiver",
+            value=True,
+            help="Receivers will automatically reply to test emails"
+        )
+
+    with col_c:
+        st.write("")
+        st.write("")
+        if st.button("🚀 Send Test Email(s)", type="primary", use_container_width=True):
+            spinner_text = f"Sending {num_emails} test email(s)"
+            if include_replies:
+                spinner_text += " with auto-replies"
+            spinner_text += "..."
+
+            with st.spinner(spinner_text):
+                # Call API endpoint to send test emails
+                try:
+                    response = requests.post(
+                        f"{API_BASE_URL}/api/test/send-emails",
+                        json={
+                            "sender_id": sender_id,
+                            "receiver_id": receiver_id,
+                            "count": num_emails,
+                            "include_replies": include_replies
+                        },
+                        timeout=120  # 2 minute timeout for test emails with replies
+                    )
+
+                    if response.status_code == 200:
+                        result = response.json()
+                        emails_sent = result.get('emails_sent', 0)
+                        replies_sent = result.get('replies_sent', 0)
+
+                        success_msg = f"✅ Successfully sent {emails_sent} test email(s)"
+                        if include_replies and replies_sent > 0:
+                            success_msg += f" and {replies_sent} auto-reply(ies)"
+                        success_msg += "!"
+                        st.success(success_msg)
+
+                        # Show results
+                        if result.get('emails'):
+                            with st.expander("📧 Email Details", expanded=True):
+                                for i, email_info in enumerate(result['emails'], 1):
+                                    st.write(f"**Email {i}:**")
+                                    st.write(f"- Subject: `{email_info.get('subject')}`")
+                                    st.write(f"- From: `{email_info.get('from')}`")
+                                    st.write(f"- To: `{email_info.get('to')}`")
+                                    st.write(f"- Status: `{email_info.get('status')}`")
+
+                                    if email_info.get('has_reply'):
+                                        st.write(f"- ✅ Reply sent: `{email_info.get('reply_subject')}`")
+                                    elif include_replies:
+                                        st.write(f"- ❌ No reply sent")
+
+                                    if i < len(result['emails']):
+                                        st.markdown("---")
+
+                        st.info("💡 Check both inboxes to verify email delivery, replies, and content quality.")
+                    else:
+                        st.error(f"❌ Failed to send test emails: {response.text}")
+
+                except requests.exceptions.Timeout:
+                    st.error("❌ Request timed out. This may happen with multiple emails and replies. Check API logs.")
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
+
+    st.markdown("---")
+
+    st.subheader("ℹ️ About Quick Test")
+    st.markdown("""
+    **Quick Test** allows you to:
+    - ✅ Verify SMTP/IMAP configurations are working
+    - ✅ Test AI-generated email content quality
+    - ✅ Check email delivery and inbox placement
+    - ✅ Validate sender/receiver interactions
+    - ✅ Test automatic replies from receivers (optional)
+
+    **Note:** Test emails are sent immediately and **do not** count towards warming campaign metrics.
+
+    **Auto-replies:** When enabled, receivers will automatically reply to test emails after 2 seconds, simulating real email conversations.
+    """)
+
+
+elif page == "🧮 Estimate":
+    st.title("🧮 Campaign Resource Estimator")
+    st.markdown("Plan your campaign infrastructure by estimating required resources.")
+
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        st.subheader("Campaign Parameters")
+
+        with st.form("estimate_form"):
+            col_a, col_b, col_c = st.columns(3)
+
+            with col_a:
+                num_senders = st.number_input(
+                    "Sender Accounts",
+                    min_value=1,
+                    max_value=1000,
+                    value=10,
+                    step=1,
+                    help="Number of email accounts to warm up"
+                )
+
+            with col_b:
+                num_receivers = st.number_input(
+                    "Receiver Accounts",
+                    min_value=1,
+                    max_value=1000,
+                    value=10,
+                    step=1,
+                    help="Number of accounts that will receive and reply"
+                )
+
+            with col_c:
+                duration_weeks = st.number_input(
+                    "Duration (weeks)",
+                    min_value=1,
+                    max_value=24,
+                    value=6,
+                    step=1,
+                    help="Campaign duration in weeks"
+                )
+
+            submit = st.form_submit_button("🔍 Calculate Estimate", use_container_width=True, type="primary")
+
+            if submit:
+                # Import estimator
+                import sys
+                from pathlib import Path
+                sys.path.insert(0, str(Path(__file__).parent.parent))
+                from scripts.estimate_resources import ResourceEstimator
+
+                # Calculate estimate
+                estimator = ResourceEstimator()
+                estimate = estimator.estimate(
+                    num_senders=num_senders,
+                    num_receivers=num_receivers,
+                    duration_weeks=duration_weeks
+                )
+
+                # Store in session state
+                st.session_state.estimate = estimate
+
+    with col2:
+        st.subheader("Quick Presets")
+
+        if st.button("🏠 Small (10 accounts)", use_container_width=True):
+            st.session_state.preset_senders = 10
+            st.session_state.preset_receivers = 10
+            st.session_state.preset_weeks = 6
+            st.rerun()
+
+        if st.button("🏢 Medium (50 accounts)", use_container_width=True):
+            st.session_state.preset_senders = 50
+            st.session_state.preset_receivers = 50
+            st.session_state.preset_weeks = 8
+            st.rerun()
+
+        if st.button("🏭 Large (200 accounts)", use_container_width=True):
+            st.session_state.preset_senders = 200
+            st.session_state.preset_receivers = 200
+            st.session_state.preset_weeks = 10
+            st.rerun()
+
+        if st.button("🌐 Enterprise (500 accounts)", use_container_width=True):
+            st.session_state.preset_senders = 500
+            st.session_state.preset_receivers = 500
+            st.session_state.preset_weeks = 12
+            st.rerun()
+
+    # Display results if estimate exists
+    if 'estimate' in st.session_state:
+        estimate = st.session_state.estimate
+
+        st.markdown("---")
+        st.subheader("📊 Estimation Results")
+
+        # Campaign info
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Senders", f"{estimate.num_senders:,}")
+        with col2:
+            st.metric("Receivers", f"{estimate.num_receivers:,}")
+        with col3:
+            st.metric("Duration", f"{estimate.duration_weeks} weeks")
+
+        st.markdown("---")
+
+        # Email volume
+        st.subheader("📧 Email Volume")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Emails", f"{estimate.total_emails:,}")
+        with col2:
+            st.metric("Avg per Day", f"{estimate.emails_per_day_avg:,}")
+        with col3:
+            st.metric("Avg per Week", f"{estimate.emails_per_week_avg:,}")
+        with col4:
+            st.metric("Peak per Day", f"{estimate.peak_emails_per_day:,}")
+
+        st.markdown("---")
+
+        # Resources
+        st.subheader("💾 Resource Requirements")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**Memory (RAM)**")
+            st.metric(
+                "Minimum Required",
+                f"{estimate.ram_mb:,} MB ({estimate.ram_mb / 1024:.1f} GB)"
+            )
+            st.metric(
+                "Recommended",
+                f"{estimate.ram_mb_recommended:,} MB ({estimate.ram_mb_recommended / 1024:.1f} GB)",
+                delta="50% overhead"
+            )
+
+        with col2:
+            st.markdown("**CPU Cores**")
+            st.metric(
+                "Minimum Required",
+                f"{estimate.cpu_cores:.1f} cores"
+            )
+            st.metric(
+                "Recommended",
+                f"{estimate.cpu_cores_recommended:.1f} cores",
+                delta="50% overhead"
+            )
+
+        col3, col4 = st.columns(2)
+
+        with col3:
+            st.markdown("**Storage**")
+            st.metric(
+                "Disk Space",
+                f"{estimate.storage_gb:.2f} GB"
+            )
+
+        with col4:
+            st.markdown("**Configuration**")
+            st.metric(
+                "Profile",
+                estimate.recommended_config.upper()
+            )
+
+        st.markdown("---")
+
+        # Infrastructure details
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("🗄️ Database")
+            st.write(f"**Connections:** {estimate.db_connections}")
+            st.write(f"**Pool Size:** {estimate.db_pool_size}")
+
+        with col2:
+            st.subheader("⚙️ Workers")
+            st.write(f"**Celery Workers:** {estimate.celery_workers}")
+            st.write(f"**Concurrency:** {estimate.celery_concurrency}")
+
+        st.markdown("---")
+
+        # API usage
+        st.subheader("🔌 API Usage & Costs")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total API Calls", f"{estimate.api_calls_total:,}")
+        with col2:
+            st.metric("Calls per Day", f"{estimate.api_calls_per_day:,}")
+        with col3:
+            st.metric("Estimated Cost", f"${estimate.estimated_cost_usd:.2f}", help="Using free tier (OpenRouter/Groq)")
+
+        # Warnings
+        if estimate.warnings:
+            st.markdown("---")
+            st.subheader("⚠️ Warnings & Recommendations")
+            for warning in estimate.warnings:
+                st.warning(warning)
+        else:
+            st.success("✅ No warnings - your configuration looks good!")
+
+        # Docker compose suggestion
+        st.markdown("---")
+        st.subheader("🐳 Docker Compose Configuration")
+
+        docker_config = f"""```yaml
+# Suggested resource limits for docker-compose.yml
+
+services:
+  api:
+    deploy:
+      resources:
+        limits:
+          cpus: '{estimate.cpu_cores_recommended / 4:.2f}'
+          memory: {estimate.ram_mb_recommended // 8}M
+        reservations:
+          cpus: '{estimate.cpu_cores / 4:.2f}'
+          memory: {estimate.ram_mb // 8}M
+
+  worker:
+    deploy:
+      resources:
+        limits:
+          cpus: '{estimate.cpu_cores_recommended / 2:.2f}'
+          memory: {estimate.ram_mb_recommended // 4}M
+        reservations:
+          cpus: '{estimate.cpu_cores / 2:.2f}'
+          memory: {estimate.ram_mb // 4}M
+
+  postgres:
+    environment:
+      POSTGRES_MAX_CONNECTIONS: {estimate.db_pool_size}
+    deploy:
+      resources:
+        limits:
+          memory: {estimate.ram_mb_recommended // 6}M
+
+  redis:
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+```"""
+        st.code(docker_config, language="yaml")
+
+    st.markdown("---")
+
+    # Info section
+    st.subheader("ℹ️ About Resource Estimation")
+    st.markdown("""
+    **How it works:**
+    - Calculates email volume based on progressive warming schedule (5 → 80 emails/day)
+    - Estimates RAM based on accounts, workers, and services
+    - Estimates CPU based on email processing load
+    - Calculates storage for emails, accounts, and metrics
+    - Determines optimal worker count and database connections
+    - Provides docker-compose configuration suggestions
+
+    **Configuration Profiles:**
+    - **Small:** 1-10 accounts (development, testing)
+    - **Medium:** 10-50 accounts (small business)
+    - **Large:** 50-200 accounts (enterprise)
+    - **Enterprise:** 200+ accounts (large scale)
+
+    **Notes:**
+    - Estimates are conservative and include overhead
+    - Actual usage may vary based on email content and patterns
+    - Using free API tier (OpenRouter/Groq) keeps costs at $0
+    - For paid tiers, adjust cost estimates accordingly
+    """)
+
+
+elif page == "💰 API Costs":
+    st.title("💰 API Costs & Rate Limits")
+    st.markdown("Monitor API usage and avoid rate limit exhaustion.")
+
+    # Import dependencies
+    # In Docker, warmit is at /app/warmit (parent.parent from dashboard/app.py)
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from warmit.services.rate_limit_tracker import get_rate_limit_tracker
+    from warmit.services.config_profiles import get_profile_manager
+
+    # Get tracker
+    tracker = get_rate_limit_tracker()
+    statuses = tracker.get_all_statuses()
+
+    # Overall status
+    st.subheader("📊 Overall Status")
+
+    col1, col2, col3 = st.columns(3)
+
+    total_requests_today = sum(info.requests_today for info in statuses.values())
+    total_limit_today = sum(info.rpd_limit for info in statuses.values())
+
+    with col1:
+        st.metric(
+            "Total Requests Today",
+            f"{total_requests_today:,}",
+            help="Combined requests across all providers"
+        )
+
+    with col2:
+        utilization = (total_requests_today / total_limit_today * 100) if total_limit_today > 0 else 0
+        st.metric(
+            "Overall Utilization",
+            f"{utilization:.1f}%",
+            delta=f"{total_limit_today - total_requests_today:,} remaining"
+        )
+
+    with col3:
+        exhausted_count = sum(1 for info in statuses.values() if info.is_exhausted)
+        status_color = "🔴" if exhausted_count > 0 else "🟢"
+        st.metric(
+            "Provider Status",
+            f"{status_color} {len(statuses) - exhausted_count}/{len(statuses)} Available"
+        )
+
+    st.markdown("---")
+
+    # Provider details
+    st.subheader("🔌 Provider Details")
+
+    for provider_name, info in statuses.items():
+        with st.expander(f"{provider_name.upper()} - {info.utilization_rpd():.1f}% used", expanded=True):
+            # Status indicator
+            if info.is_exhausted:
+                st.error("❌ **EXHAUSTED** - Rate limit reached")
+            elif info.utilization_rpd() > 90:
+                st.warning("⚠️ **CRITICAL** - Near limit")
+            elif info.utilization_rpd() > 75:
+                st.info("ℹ️ **WARNING** - High usage")
+            else:
+                st.success("✅ **HEALTHY** - Normal usage")
+
+            # Metrics
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("**Requests Per Minute (RPM)**")
+                rpm_utilization = info.utilization_rpm()
+                st.progress(rpm_utilization / 100)
+                st.write(f"{info.requests_this_minute} / {info.rpm_limit} ({rpm_utilization:.1f}%)")
+                st.caption(f"Resets in {int(info.time_until_rpm_reset())}s")
+
+            with col2:
+                st.markdown("**Requests Per Day (RPD)**")
+                rpd_utilization = info.utilization_rpd()
+                st.progress(rpd_utilization / 100)
+                st.write(f"{info.requests_today:,} / {info.rpd_limit:,} ({rpd_utilization:.1f}%)")
+                hours_until_reset = info.time_until_rpd_reset() / 3600
+                st.caption(f"Resets in {hours_until_reset:.1f}h")
+
+            # Request rate and forecast
+            request_rate = tracker.get_request_rate(provider_name)
+            saturation_time = tracker.get_saturation_forecast(provider_name)
+
+            col_a, col_b = st.columns(2)
+
+            with col_a:
+                st.metric(
+                    "Current Rate",
+                    f"{request_rate:.1f} req/h",
+                    help="Requests per hour in last 60 minutes"
+                )
+
+            with col_b:
+                if saturation_time:
+                    hours_until = (saturation_time - datetime.now()).total_seconds() / 3600
+                    st.metric(
+                        "Saturation ETA",
+                        f"{hours_until:.1f}h",
+                        delta="⚠️ Will exhaust today",
+                        delta_color="inverse",
+                        help="Estimated time until daily limit is reached"
+                    )
+                else:
+                    st.metric(
+                        "Saturation ETA",
+                        "Not today",
+                        delta="✅ Won't exhaust",
+                        help="Current rate won't exhaust daily limit"
+                    )
+
+            # Actions
+            if st.button(f"Reset {provider_name} counters", key=f"reset_{provider_name}"):
+                tracker.reset_provider(provider_name)
+                st.success(f"Reset {provider_name} counters")
+                st.rerun()
+
+    st.markdown("---")
+
+    # Configuration recommendations
+    st.subheader("💡 Optimization Recommendations")
+
+    # Get current number of accounts
+    accounts_data = get_accounts()
+    num_senders = len([a for a in accounts_data if a.get('type') == 'sender']) if accounts_data else 10
+
+    # Get recommended profile
+    profile_manager = get_profile_manager()
+    recommended_profile = profile_manager.get_recommended_profile(num_senders)
+
+    if recommended_profile:
+        st.info(f"**Recommended Profile:** {recommended_profile.name.upper()}")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**API Limits (Recommended)**")
+            st.write(f"- OpenRouter RPM: {recommended_profile.api_limits['openrouter_rpm']}")
+            st.write(f"- OpenRouter RPD: {recommended_profile.api_limits['openrouter_rpd']}")
+            st.write(f"- Groq RPM: {recommended_profile.api_limits['groq_rpm']}")
+            st.write(f"- Groq RPD: {recommended_profile.api_limits['groq_rpd']}")
+
+        with col2:
+            st.markdown("**Current Limits**")
+            for provider_name, info in statuses.items():
+                st.write(f"- {provider_name.title()} RPM: {info.rpm_limit}")
+                st.write(f"- {provider_name.title()} RPD: {info.rpd_limit}")
+
+    # Recommendations based on utilization
+    high_usage_providers = [name for name, info in statuses.items() if info.utilization_rpd() > 75]
+
+    if high_usage_providers:
+        st.warning("**⚠️ High Usage Detected**")
+        st.markdown("Consider these actions:")
+        st.markdown("- Add more API keys for load distribution")
+        st.markdown("- Upgrade to paid tier for higher limits")
+        st.markdown("- Reduce email sending rate")
+        st.markdown("- Enable local fallback templates")
+
+    exhausted_providers = [name for name, info in statuses.items() if info.is_exhausted]
+
+    if exhausted_providers:
+        st.error("**❌ Exhausted Providers**")
+        st.markdown(f"Providers exhausted: **{', '.join(exhausted_providers)}**")
+        st.markdown("**Immediate actions:**")
+        st.markdown("- Wait for daily reset")
+        st.markdown("- Switch to alternative provider")
+        st.markdown("- Use local template fallback")
+
+    st.markdown("---")
+
+    # Rate limit information
+    st.subheader("ℹ️ About Rate Limits")
+
+    tab1, tab2, tab3 = st.tabs(["OpenRouter", "Groq", "How It Works"])
+
+    with tab1:
+        st.markdown("""
+        ### OpenRouter Free Tier
+
+        **Rate Limits:**
+        - **20 requests/minute** (RPM)
+        - **50 requests/day** (RPD) if you have <$10 in credits
+        - **1,000 requests/day** (RPD) if you have ≥$10 in credits
+
+        **Models:**
+        - Only models with `:free` suffix (e.g., `meta-llama/llama-3.3-70b-instruct:free`)
+
+        **Tips:**
+        - Add multiple API keys for load distribution
+        - Purchase $10 in credits to unlock 1,000 RPD
+        - Monitor usage closely to avoid exhaustion
+        - Use local fallback when limits reached
+
+        **Paid Tier:**
+        - No platform-level rate limits
+        - Pay per token used
+        - Better for production workloads
+
+        [View OpenRouter Pricing →](https://openrouter.ai/pricing)
+        """)
+
+    with tab2:
+        st.markdown("""
+        ### Groq Free Tier
+
+        **Rate Limits:**
+        - **Varies by model** (typically 6,000-30,000 tokens/min)
+        - **~1,000 requests/day** for most models
+        - **500,000 tokens/day** for some models
+
+        **How It Works:**
+        - Limits apply at organization level
+        - Both RPM and tokens/minute (TPM) limits
+        - Both RPD and tokens/day (TPD) limits
+        - You hit whichever limit comes first
+
+        **Tips:**
+        - Check your specific limits in Groq console
+        - Limits vary by model (some have higher limits)
+        - Use multiple API keys for redundancy
+        - Monitor tokens, not just requests
+
+        **Paid Tier:**
+        - Higher limits
+        - Better SLA
+        - Priority access
+
+        [View Groq Pricing →](https://groq.com/pricing)
+        """)
+
+    with tab3:
+        st.markdown("""
+        ### How WarmIt Handles Rate Limits
+
+        **Automatic Tracking:**
+        - Tracks every API request in real-time
+        - Monitors RPM and RPD for each provider
+        - Calculates utilization percentages
+        - Forecasts when limits will be reached
+
+        **Automatic Failover:**
+        When a provider hits limits:
+        1. Automatically switches to next available provider
+        2. Falls back to local template generation if all exhausted
+        3. Never fails completely
+
+        **Fallback Chain:**
+        ```
+        OpenRouter Key 1 → OpenRouter Key 2 → OpenRouter Key 3
+        → Groq Key 1 → Groq Key 2 → OpenAI
+        → Local Templates (always works)
+        ```
+
+        **Smart Throttling:**
+        - Respects rate limits automatically
+        - Adds delays when approaching limits
+        - Distributes load across multiple keys
+        - Buffer zone (uses only 80-90% of limit)
+
+        **Monitoring & Alerts:**
+        - Real-time dashboard (this page!)
+        - Saturation forecasts
+        - Warning when >75% utilized
+        - Critical alert when >90% utilized
+        """)
+
+    st.markdown("---")
+
+    st.caption("💡 **Tip:** Refresh this page to see updated statistics. Auto-refresh is enabled.")
+
+
+elif page == "⚙️ Settings":
+    st.title("⚙️ Settings")
+
+    tab1, tab2 = st.tabs(["🔐 Change Password", "ℹ️ About"])
+
+    with tab1:
+        st.subheader("Change Admin Password")
+        st.markdown("Update your dashboard admin password for security.")
+
+        with st.form("change_password_form"):
+            current_password = st.text_input(
+                "Current Password*",
+                type="password",
+                placeholder="Enter your current password"
+            )
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                new_password = st.text_input(
+                    "New Password*",
+                    type="password",
+                    placeholder="Enter new password (min 8 chars)"
+                )
+
+            with col2:
+                confirm_password = st.text_input(
+                    "Confirm New Password*",
+                    type="password",
+                    placeholder="Confirm new password"
+                )
+
+            submit = st.form_submit_button("🔄 Change Password", use_container_width=True, type="primary")
+
+            if submit:
+                # Validation
+                if not current_password or not new_password or not confirm_password:
+                    st.error("⚠️ Please fill in all fields")
+                elif new_password != confirm_password:
+                    st.error("❌ New passwords do not match")
+                elif len(new_password) < 8:
+                    st.error("❌ New password must be at least 8 characters")
+                else:
+                    # Attempt password change
+                    success, message = change_password(current_password, new_password)
+
+                    if success:
+                        st.success(f"✅ {message}")
+                        st.info("💡 Please remember your new password. There is no password recovery!")
+                    else:
+                        st.error(f"❌ {message}")
+
+        st.markdown("---")
+        st.info("""
+        **Security Tips:**
+        - Use a strong password with a mix of letters, numbers, and special characters
+        - Don't reuse passwords from other services
+        - Store your password in a secure password manager
+        - There is no password recovery - keep your password safe!
+        """)
+
+        # Logout button
+        st.markdown("---")
+        st.subheader("🚪 Logout")
+        st.markdown("End your current session. You'll need to login again.")
+
+        col_logout1, col_logout2, col_logout3 = st.columns([1, 1, 1])
+        with col_logout2:
+            if st.button("🚪 Logout", type="secondary", use_container_width=True):
+                # Delete session token
+                if st.session_state.session_token:
+                    delete_session(st.session_state.session_token)
+
+                # Clear session state and query params
+                st.session_state.authenticated = False
+                st.session_state.session_token = None
+                if 'session' in st.query_params:
+                    del st.query_params['session']
+
+                st.success("✅ Logged out successfully")
+                time.sleep(1)
+                st.rerun()
+
+    with tab2:
+        st.subheader("About WarmIt")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("""
+            **Version:** 0.1.1
+
+            **Description:**
+            WarmIt is an email warming platform that helps gradually increase
+            your email sending reputation through automated, AI-powered
+            conversations between sender and receiver accounts.
+
+            **Features:**
+            - 🔥 Progressive email warming
+            - 🤖 AI-generated content
+            - 📊 Real-time analytics
+            - 🎯 Campaign management
+            - 🔐 Secure authentication
+            """)
+
+        with col2:
+            st.markdown("""
+            **Tech Stack:**
+            - Python 3.11
+            - FastAPI
+            - PostgreSQL / SQLite
+            - Redis & Celery
+            - Streamlit
+            - Docker
+
+            **Links:**
+            - [GitHub Repository](#)
+            - [Documentation](#)
+            - [Report Issue](#)
+            """)
+
+        st.markdown("---")
+
+        # System info
+        st.subheader("System Information")
+
+        col_a, col_b, col_c = st.columns(3)
+
+        with col_a:
+            st.metric("API Status", "🟢 Online" if check_api_health() else "🔴 Offline")
+
+        with col_b:
+            st.metric("API URL", API_BASE_URL)
+
+        with col_c:
+            italy_tz = ZoneInfo("Europe/Rome")
+            now_italy = datetime.now(italy_tz)
+            st.metric("Server Time", now_italy.strftime("%H:%M:%S"))
 
 
 # Footer
@@ -734,7 +1732,10 @@ with col1:
 with col2:
     st.caption("📡 API: http://localhost:8000")
 with col3:
-    st.caption("🔄 Last updated: " + datetime.now().strftime("%H:%M:%S"))
+    # Use Rome/Italy timezone for display
+    italy_tz = ZoneInfo("Europe/Rome")
+    now_italy = datetime.now(italy_tz)
+    st.caption("🔄 Last updated: " + now_italy.strftime("%H:%M:%S"))
 
 # Auto-refresh
 if auto_refresh:

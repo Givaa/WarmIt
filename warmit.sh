@@ -17,10 +17,89 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Configuration
-COMPOSE_FILE="docker/docker-compose.yml"
+COMPOSE_FILE="docker/docker-compose.prod.yml"
 ENV_FILE="docker/.env"
 ENV_EXAMPLE=".env.example"
 
+# Check if Docker is running (needed for all commands)
+if ! docker info > /dev/null 2>&1; then
+    echo -e "${RED}❌ Error: Docker is not running${NC}"
+    echo ""
+    echo "Please start Docker and try again:"
+    echo "  - macOS: Open Docker Desktop"
+    echo "  - Linux: sudo systemctl start docker"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ Docker is running${NC}"
+
+# Check if docker-compose or docker compose is available
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+elif docker compose version &> /dev/null 2>&1; then
+    DOCKER_COMPOSE="docker compose"
+else
+    echo -e "${RED}❌ Error: docker-compose not found${NC}"
+    echo ""
+    echo "Please install docker-compose:"
+    echo "  https://docs.docker.com/compose/install/"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ docker-compose found${NC}"
+echo ""
+
+# Handle commands that don't need .env validation
+if [ "$1" == "restart" ]; then
+    echo -e "${BLUE}Restarting WarmIt...${NC}"
+    $DOCKER_COMPOSE -f $COMPOSE_FILE restart
+    echo ""
+    echo -e "${GREEN}✅ WarmIt restarted!${NC}"
+    exit 0
+fi
+
+if [ "$1" == "stop" ]; then
+    echo -e "${YELLOW}Stopping WarmIt...${NC}"
+    $DOCKER_COMPOSE -f $COMPOSE_FILE stop
+    echo ""
+    echo -e "${GREEN}✅ WarmIt stopped${NC}"
+    exit 0
+fi
+
+if [ "$1" == "down" ]; then
+    echo -e "${RED}Stopping and removing all containers...${NC}"
+    read -p "Are you sure? This will remove all containers but keep data (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        $DOCKER_COMPOSE -f $COMPOSE_FILE down
+        echo -e "${GREEN}✅ Containers removed${NC}"
+    fi
+    exit 0
+fi
+
+if [ "$1" == "reset" ]; then
+    echo -e "${RED}⚠️  DANGER: This will DELETE ALL DATA!${NC}"
+    echo "This includes:"
+    echo "  - All email accounts"
+    echo "  - All campaigns"
+    echo "  - All metrics and history"
+    echo "  - Database and Redis data"
+    echo ""
+    read -p "Are you ABSOLUTELY SURE? Type 'DELETE' to confirm: " -r
+    echo
+    if [[ $REPLY == "DELETE" ]]; then
+        echo "Stopping containers..."
+        $DOCKER_COMPOSE -f $COMPOSE_FILE down -v
+        echo -e "${GREEN}✅ All data deleted${NC}"
+        echo ""
+        echo "Run './warmit.sh' to start fresh"
+    else
+        echo "Cancelled"
+    fi
+    exit 0
+fi
+
+# For start command (default), validate .env and API keys
 # Check if .env exists in docker/ directory
 if [ ! -f "$ENV_FILE" ]; then
     echo -e "${RED}❌ Error: docker/.env file not found${NC}"
@@ -49,14 +128,54 @@ if [ ! -f "$ENV_FILE" ]; then
     echo -e "${YELLOW}⚠️  IMPORTANT: Please edit docker/.env and add your API keys!${NC}"
     echo ""
     echo "Required configuration:"
-    echo "  1. Choose AI provider: AI_PROVIDER (openrouter or groq)"
-    echo "  2. Add API key: OPENROUTER_API_KEY=sk-or-v1-xxxxx"
-    echo "  3. Set secure password: POSTGRES_PASSWORD=your_secure_password"
+    echo "  1. Generate encryption key:"
+    echo "     python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+    echo "  2. Add ENCRYPTION_KEY to docker/.env"
+    echo "  3. Choose AI provider: AI_PROVIDER (openrouter or groq)"
+    echo "  4. Add API keys (supports multiple for failover):"
+    echo "     OPENROUTER_API_KEY=sk-or-v1-xxxxx"
+    echo "     OPENROUTER_API_KEY_2=sk-or-v1-xxxxx  # Optional"
+    echo "     OPENROUTER_API_KEY_3=sk-or-v1-xxxxx  # Optional"
+    echo "     GROQ_API_KEY=gsk_xxxxx"
+    echo "     GROQ_API_KEY_2=gsk_xxxxx  # Optional"
+    echo "  5. Set secure password: POSTGRES_PASSWORD=your_secure_password"
     echo ""
     echo "Edit with: nano docker/.env"
     echo ""
     read -p "Press Enter after editing docker/.env, or Ctrl+C to exit..."
+else
+    # docker/.env exists - check if it needs updating for v0.2.0
+    if ! grep -q "OPENROUTER_API_KEY_2" "$ENV_FILE"; then
+        echo -e "${YELLOW}⚠️  Updating docker/.env with new v0.2.0 configuration...${NC}"
+        
+        # Backup old .env
+        cp "$ENV_FILE" "$ENV_FILE.backup.$(date +%Y%m%d_%H%M%S)"
+        
+        # Add missing keys
+        if ! grep -q "OPENROUTER_API_KEY_2" "$ENV_FILE"; then
+            echo "" >> "$ENV_FILE"
+            echo "# Multiple API keys for fallback (v0.2.0+)" >> "$ENV_FILE"
+            echo "OPENROUTER_API_KEY_2=  # Optional: 2nd OpenRouter key for fallback" >> "$ENV_FILE"
+            echo "OPENROUTER_API_KEY_3=  # Optional: 3rd OpenRouter key for fallback" >> "$ENV_FILE"
+            echo "GROQ_API_KEY_2=  # Optional: 2nd Groq key for fallback" >> "$ENV_FILE"
+        fi
+        
+        if ! grep -q "ENCRYPTION_KEY" "$ENV_FILE"; then
+            echo "" >> "$ENV_FILE"
+            echo "# Security - Encryption Key for sensitive data (v0.2.0+)" >> "$ENV_FILE"
+            echo "# Generate with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"" >> "$ENV_FILE"
+            echo "ENCRYPTION_KEY=" >> "$ENV_FILE"
+        fi
+        
+        echo -e "${GREEN}✅ docker/.env updated! Backup saved.${NC}"
+        echo ""
+        echo -e "${YELLOW}⚠️  IMPORTANT: Generate and add ENCRYPTION_KEY to docker/.env!${NC}"
+        echo "Run: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+        echo ""
+        read -p "Press Enter after adding ENCRYPTION_KEY, or Ctrl+C to exit..."
+    fi
 fi
+
 
 # Verify API key is configured
 AI_PROVIDER=$(grep "^AI_PROVIDER=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'' | sed 's/#.*//')
@@ -104,84 +223,7 @@ else
 fi
 
 echo -e "${GREEN}✅ Configuration file found${NC}"
-
-# Check if Docker is running
-if ! docker info > /dev/null 2>&1; then
-    echo -e "${RED}❌ Error: Docker is not running${NC}"
-    echo ""
-    echo "Please start Docker and try again:"
-    echo "  - macOS: Open Docker Desktop"
-    echo "  - Linux: sudo systemctl start docker"
-    exit 1
-fi
-
-echo -e "${GREEN}✅ Docker is running${NC}"
-
-# Check if docker-compose or docker compose is available
-if command -v docker-compose &> /dev/null; then
-    DOCKER_COMPOSE="docker-compose"
-elif docker compose version &> /dev/null 2>&1; then
-    DOCKER_COMPOSE="docker compose"
-else
-    echo -e "${RED}❌ Error: docker-compose not found${NC}"
-    echo ""
-    echo "Please install docker-compose:"
-    echo "  https://docs.docker.com/compose/install/"
-    exit 1
-fi
-
-echo -e "${GREEN}✅ docker-compose found${NC}"
 echo ""
-
-# Check for existing installation
-if [ "$1" == "restart" ]; then
-    echo -e "${BLUE}Restarting WarmIt...${NC}"
-    $DOCKER_COMPOSE -f $COMPOSE_FILE restart
-    echo ""
-    echo -e "${GREEN}✅ WarmIt restarted!${NC}"
-    exit 0
-fi
-
-if [ "$1" == "stop" ]; then
-    echo -e "${YELLOW}Stopping WarmIt...${NC}"
-    $DOCKER_COMPOSE -f $COMPOSE_FILE stop
-    echo ""
-    echo -e "${GREEN}✅ WarmIt stopped${NC}"
-    exit 0
-fi
-
-if [ "$1" == "down" ]; then
-    echo -e "${RED}Stopping and removing all containers...${NC}"
-    read -p "Are you sure? This will remove all containers but keep data (y/N): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        $DOCKER_COMPOSE -f $COMPOSE_FILE down
-        echo -e "${GREEN}✅ Containers removed${NC}"
-    fi
-    exit 0
-fi
-
-if [ "$1" == "reset" ]; then
-    echo -e "${RED}⚠️  DANGER: This will DELETE ALL DATA!${NC}"
-    echo "This includes:"
-    echo "  - All email accounts"
-    echo "  - All campaigns"
-    echo "  - All metrics and history"
-    echo "  - Database and Redis data"
-    echo ""
-    read -p "Are you ABSOLUTELY SURE? Type 'DELETE' to confirm: " -r
-    echo
-    if [[ $REPLY == "DELETE" ]]; then
-        echo "Stopping containers..."
-        $DOCKER_COMPOSE -f $COMPOSE_FILE down -v
-        echo -e "${GREEN}✅ All data deleted${NC}"
-        echo ""
-        echo "Run './start.sh' to start fresh"
-    else
-        echo "Cancelled"
-    fi
-    exit 0
-fi
 
 # Start WarmIt
 echo -e "${BLUE}Starting WarmIt...${NC}"
@@ -244,24 +286,16 @@ echo -e "${GREEN}🎉 WarmIt is now running! 🎉${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "${BLUE}Access URLs:${NC}"
-echo "  📊 Dashboard:  http://localhost:8501"
+echo "  📊 Dashboard:  http://0.0.0.0:8501"
 echo "  📝 Logs (Web): http://localhost:8888"
 echo "  🔌 API:        http://localhost:8000"
 echo "  📖 API Docs:   http://localhost:8000/docs"
 echo ""
 echo -e "${BLUE}Useful Commands:${NC}"
 echo "  Service status:      $DOCKER_COMPOSE -f $COMPOSE_FILE ps"
-echo "  Restart:             ./start.sh restart"
-echo "  Stop:                ./start.sh stop"
-echo "  Remove containers:   ./start.sh down"
-echo ""
-echo -e "${BLUE}Features:${NC}"
-echo "  ✅ Auto-restart on failure"
-echo "  ✅ Health checks every 30s"
-echo "  ✅ Watchdog monitoring (5min)"
-echo "  ✅ Resource limits"
-echo "  ✅ Log rotation"
-echo "  ✅ Data persistence"
+echo "  Restart:             ./warmit.sh restart"
+echo "  Stop:                ./warmit.sh stop"
+echo "  Remove containers:   ./warmit.sh down"
 echo ""
 echo -e "${YELLOW}Next Steps:${NC}"
 echo "  1. Open dashboard: http://localhost:8501"

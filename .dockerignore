@@ -46,3 +46,17 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
+
+# Documentation (not needed in containers)
+docs/
+README.md
+CHANGELOG.md
+TODO.md
+PROJECT_STRUCTURE.md
+LICENSE
+
+# Scripts (needed in dashboard for estimate feature, kept in all containers for simplicity)
+# scripts/ is small (~50KB), so we keep it everywhere
+
+# Tests
+tests/

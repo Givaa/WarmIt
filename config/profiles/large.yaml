@@ -1,0 +1,75 @@
+# WarmIt Configuration Profile: LARGE
+# Recommended for: 50-200 sender accounts
+# Use case: Enterprise, agencies, large marketing operations
+
+name: "large"
+description: "Large scale deployment for 50-200 accounts"
+max_senders: 200
+max_receivers: 200
+
+# Resource limits
+resources:
+  ram_mb: 8192  # 8GB
+  cpu_cores: 4.0
+  storage_gb: 50
+
+# Email volume
+email_volume:
+  min_emails_per_day: 5
+  max_emails_per_day: 100
+  warmup_duration_weeks: 10
+  response_delay_min_hours: 1
+  response_delay_max_hours: 12
+
+# Workers
+workers:
+  celery_workers: 8
+  celery_concurrency: 16
+  max_tasks_per_child: 500
+
+# Database
+database:
+  pool_size: 50
+  max_overflow: 20
+  pool_timeout: 30
+  pool_recycle: 1800
+
+# Safety
+safety:
+  max_bounce_rate: 0.03
+  auto_pause_on_high_bounce: true
+  max_daily_sends_per_account: 100
+
+# API rate limiting
+api_limits:
+  # Multiple paid keys recommended
+  openrouter_rpm: 100  # Multiple paid keys
+  openrouter_rpd: 10000  # Paid tier
+
+  groq_rpm: 150  # Multiple keys
+  groq_rpd: 10000  # Paid tier
+
+  rate_limit_buffer: 0.9
+
+  max_retries: 5
+  retry_delay_seconds: 1
+  backoff_factor: 1.5
+
+# Monitoring
+monitoring:
+  metrics_retention_days: 90
+  log_level: "INFO"
+  enable_performance_tracking: true
+  enable_cost_tracking: true
+  enable_alerts: true
+  alert_threshold_percentage: 80
+
+# Recommendations
+recommendations:
+  - "PostgreSQL with replication recommended"
+  - "Use paid API tiers (avoid free tier limits)"
+  - "Use 3+ API keys per provider for redundancy"
+  - "Enable Prometheus/Grafana monitoring"
+  - "Set up admin notifications (Telegram/Discord)"
+  - "Consider dedicated server or cloud instance"
+  - "Enable automatic scaling"

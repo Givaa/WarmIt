@@ -1,0 +1,21 @@
+[server]
+port = 8501
+address = "0.0.0.0"
+enableXsrfProtection = false
+enableCORS = false
+
+[runner]
+# Ensure clean reruns
+fastReruns = true
+magicEnabled = false
+
+[client]
+# Improve page switching behavior
+toolbarMode = "minimal"
+showErrorDetails = true
+
+[browser]
+# Prevent caching issues
+gatherUsageStats = false
+serverAddress = "0.0.0.0"
+serverPort = 8501

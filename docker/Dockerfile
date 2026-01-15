@@ -2,17 +2,26 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy dependency files first for better caching
-COPY requirements.txt ./
-
-# Install system dependencies, Python packages, then remove build deps
+# Install system dependencies including Poetry
 RUN apt-get update && apt-get install -y \
     curl \
     build-essential \
-    && pip install --no-cache-dir -r requirements.txt \
+    && curl -sSL https://install.python-poetry.org | python3 - \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add Poetry to PATH
+ENV PATH="/root/.local/bin:$PATH"
+
+# Copy dependency files first for better caching
+COPY pyproject.toml ./
+
+# Install Python packages using Poetry
+# --no-root: don't install the project itself yet
+# --only main: only install main dependencies, not dev
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-root --only main \
     && apt-get remove -y build-essential \
     && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/* \
     && rm -rf /root/.cache
 
 # Copy application code

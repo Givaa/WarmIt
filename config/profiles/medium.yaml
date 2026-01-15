@@ -1,0 +1,71 @@
+# WarmIt Configuration Profile: MEDIUM
+# Recommended for: 10-50 sender accounts
+# Use case: Small business, marketing teams
+
+name: "medium"
+description: "Medium scale deployment for 10-50 accounts"
+max_senders: 50
+max_receivers: 50
+
+# Resource limits
+resources:
+  ram_mb: 4096  # 4GB
+  cpu_cores: 2.0
+  storage_gb: 20
+
+# Email volume
+email_volume:
+  min_emails_per_day: 5
+  max_emails_per_day: 80
+  warmup_duration_weeks: 8
+  response_delay_min_hours: 1
+  response_delay_max_hours: 8
+
+# Workers
+workers:
+  celery_workers: 4
+  celery_concurrency: 8
+  max_tasks_per_child: 1000
+
+# Database
+database:
+  pool_size: 25
+  max_overflow: 10
+  pool_timeout: 30
+  pool_recycle: 3600
+
+# Safety
+safety:
+  max_bounce_rate: 0.05
+  auto_pause_on_high_bounce: true
+  max_daily_sends_per_account: 80
+
+# API rate limiting
+api_limits:
+  # Multiple keys recommended for this scale
+  openrouter_rpm: 60  # 3 keys x 20 rpm
+  openrouter_rpd: 2500  # Multiple keys rotated
+
+  groq_rpm: 60  # 2 keys x 30 rpm
+  groq_rpd: 2000
+
+  rate_limit_buffer: 0.85
+
+  max_retries: 3
+  retry_delay_seconds: 2
+  backoff_factor: 2
+
+# Monitoring
+monitoring:
+  metrics_retention_days: 60
+  log_level: "INFO"
+  enable_performance_tracking: true
+  enable_cost_tracking: true
+
+# Recommendations
+recommendations:
+  - "PostgreSQL required (not SQLite)"
+  - "Use 2-3 API keys per provider"
+  - "Enable cost tracking dashboard"
+  - "Set up monitoring alerts"
+  - "Consider paid API tier if >2000 emails/day"
