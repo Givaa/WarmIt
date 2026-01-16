@@ -67,7 +67,22 @@ class ConfigProfileManager:
 
     def __init__(self):
         """Initialize profile manager."""
-        self.profiles_dir = Path(__file__).parent.parent.parent.parent / "config" / "profiles"
+        # Try to find config directory - works both in dev and Docker
+        # In Docker: /app/config/profiles
+        # In dev: <repo_root>/config/profiles
+        import os
+        config_dir = os.getenv("CONFIG_DIR", None)
+        if config_dir:
+            self.profiles_dir = Path(config_dir) / "profiles"
+        else:
+            # Try Docker location first
+            docker_config = Path("/app/config/profiles")
+            if docker_config.exists():
+                self.profiles_dir = docker_config
+            else:
+                # Fall back to relative path for development
+                self.profiles_dir = Path(__file__).parent.parent.parent.parent / "config" / "profiles"
+
         self.profiles: Dict[str, ProfileConfig] = {}
         self._load_profiles()
 

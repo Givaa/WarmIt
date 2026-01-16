@@ -52,6 +52,43 @@ fi
 echo -e "${GREEN}✅ docker-compose found${NC}"
 echo ""
 
+# Show help menu
+show_help() {
+    echo "🔥 WarmIt - Production Startup Script"
+    echo ""
+    echo "Usage: ./warmit.sh [COMMAND]"
+    echo ""
+    echo "Commands:"
+    echo "  (no command)    Start WarmIt in production mode (default)"
+    echo "  start           Start WarmIt in production mode"
+    echo "  restart         Restart all services"
+    echo "  stop            Stop all services (keep containers)"
+    echo "  down            Stop and remove all containers (keep data)"
+    echo "  reset           ⚠️  Delete EVERYTHING (containers, volumes, data)"
+    echo "  help            Show this help menu"
+    echo ""
+    echo "Examples:"
+    echo "  ./warmit.sh              # Start services"
+    echo "  ./warmit.sh restart      # Restart services"
+    echo "  ./warmit.sh stop         # Stop services"
+    echo "  ./warmit.sh down         # Remove containers"
+    echo "  ./warmit.sh reset        # Delete all data (use with caution!)"
+    echo ""
+    echo "Access URLs (after starting):"
+    echo "  📊 Dashboard:  http://localhost:8501"
+    echo "  📝 Logs:       http://localhost:8888"
+    echo "  🔌 API:        http://localhost:8000"
+    echo "  📖 API Docs:   http://localhost:8000/docs"
+    echo ""
+    echo "Made with ❤️  by Givaa - https://github.com/Givaa"
+}
+
+# Handle help command
+if [ "$1" == "help" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+    show_help
+    exit 0
+fi
+
 # Handle commands that don't need .env validation
 if [ "$1" == "restart" ]; then
     echo -e "${BLUE}Restarting WarmIt...${NC}"
@@ -103,6 +140,21 @@ if [ "$1" == "reset" ]; then
         echo "Cancelled"
     fi
     exit 0
+fi
+
+# Handle explicit start command (same as default/no command)
+if [ "$1" == "start" ]; then
+    # Just continue to the normal startup flow
+    echo -e "${BLUE}Starting WarmIt...${NC}"
+    echo ""
+fi
+
+# Show error for unknown commands
+if [ -n "$1" ] && [ "$1" != "start" ]; then
+    echo -e "${RED}❌ Error: Unknown command '$1'${NC}"
+    echo ""
+    show_help
+    exit 1
 fi
 
 # For start command (default), validate .env and API keys

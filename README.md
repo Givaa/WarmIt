@@ -43,12 +43,12 @@ docker logs warmit-dashboard | grep "Admin Password"
 
 **Management:**
 ```bash
+./warmit.sh help      # Show help menu
 ./warmit.sh start     # Start all services
 ./warmit.sh stop      # Stop all services
 ./warmit.sh restart   # Restart all services
-./warmit.sh logs      # View logs
 ./warmit.sh down      # Stop and remove containers
-./warmit.sh reset     # Full reset (WARNING: deletes data)
+./warmit.sh reset     # ⚠️  Delete all data (use with caution!)
 ```
 
 ---

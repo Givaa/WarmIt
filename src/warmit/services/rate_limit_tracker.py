@@ -95,6 +95,20 @@ class RateLimitInfo:
         return hours_until_saturation
 
 
+def _get_next_midnight_timestamp() -> float:
+    """Calculate timestamp for next midnight (00:00:00).
+
+    Returns:
+        Unix timestamp for next midnight UTC
+    """
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime.now(timezone.utc)
+    # Get tomorrow's date at midnight
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return tomorrow.timestamp()
+
+
 class RateLimitTracker:
     """Track API rate limits across multiple providers and API keys."""
 
@@ -118,6 +132,47 @@ class RateLimitTracker:
         """Initialize rate limit tracker."""
         self.keys: Dict[str, RateLimitInfo] = {}
         self._initialize_keys_from_env()
+
+    def _is_valid_api_key(self, key: str) -> bool:
+        """Check if a string is a valid API key (not a placeholder or comment).
+
+        Args:
+            key: The key string to validate
+
+        Returns:
+            True if valid, False otherwise
+        """
+        if not key:
+            return False
+
+        # Skip comments (lines starting with #)
+        if key.startswith("#"):
+            return False
+
+        # Common placeholder patterns to exclude
+        placeholders = [
+            "your_",
+            "insert_",
+            "add_your_",
+            "put_your_",
+            "paste_your_",
+            "enter_your_",
+            "replace_with_",
+            "example_",
+            "test_key",
+            "dummy_",
+            "placeholder",
+            "xxx",
+            "yyy",
+            "zzz",
+        ]
+
+        key_lower = key.lower()
+        for placeholder in placeholders:
+            if placeholder in key_lower:
+                return False
+
+        return True
 
     def _initialize_keys_from_env(self):
         """Initialize API keys from environment variables."""
@@ -147,7 +202,8 @@ class RateLimitTracker:
         key_count = 0
 
         # Check main key
-        if os.getenv(env_var_prefix):
+        main_key = os.getenv(env_var_prefix, "").strip()
+        if main_key and self._is_valid_api_key(main_key):
             key_id = f"{provider}_1"
             self.keys[key_id] = RateLimitInfo(
                 provider=provider,
@@ -155,7 +211,7 @@ class RateLimitTracker:
                 rpm_limit=limits["rpm"],
                 rpd_limit=limits["rpd"],
                 minute_reset_time=time.time() + 60,
-                day_reset_time=time.time() + 86400,
+                day_reset_time=_get_next_midnight_timestamp(),
             )
             key_count += 1
             logger.info(f"Registered {key_id}")
@@ -163,7 +219,8 @@ class RateLimitTracker:
         # Check numbered keys (_2, _3, etc.)
         for i in range(2, 10):  # Support up to 9 keys per provider
             env_var = f"{env_var_prefix}_{i}"
-            if os.getenv(env_var):
+            numbered_key = os.getenv(env_var, "").strip()
+            if numbered_key and self._is_valid_api_key(numbered_key):
                 key_id = f"{provider}_{i}"
                 self.keys[key_id] = RateLimitInfo(
                     provider=provider,
@@ -171,7 +228,7 @@ class RateLimitTracker:
                     rpm_limit=limits["rpm"],
                     rpd_limit=limits["rpd"],
                     minute_reset_time=time.time() + 60,
-                    day_reset_time=time.time() + 86400,
+                    day_reset_time=_get_next_midnight_timestamp(),
                 )
                 key_count += 1
                 logger.info(f"Registered {key_id}")
@@ -255,7 +312,7 @@ class RateLimitTracker:
         # Reset daily counter
         if current_time >= info.day_reset_time:
             info.requests_today = 0
-            info.day_reset_time = current_time + 86400
+            info.day_reset_time = _get_next_midnight_timestamp()
             info.is_exhausted = False
             logger.info(f"{key_id}: RPD counter reset")
 
@@ -457,7 +514,7 @@ class RateLimitTracker:
             info.requests_this_minute = 0
             info.requests_today = 0
             info.minute_reset_time = time.time() + 60
-            info.day_reset_time = time.time() + 86400
+            info.day_reset_time = _get_next_midnight_timestamp()
             info.is_exhausted = False
             logger.info(f"Manually reset {key_id} counters")
 

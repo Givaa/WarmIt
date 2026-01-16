@@ -27,6 +27,7 @@ RUN poetry config virtualenvs.create false \
 # Copy application code
 COPY src/warmit/ ./warmit/
 COPY scripts/ ./scripts/
+COPY config/ ./config/
 
 # Create logs directory
 RUN mkdir -p logs

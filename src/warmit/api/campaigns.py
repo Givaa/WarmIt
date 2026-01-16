@@ -48,6 +48,7 @@ class CampaignResponse(BaseModel):
     bounce_rate: float
     progress_percentage: float
     language: str
+    next_send_time: Optional[datetime] = None
     created_at: datetime
 
     class Config:
@@ -174,7 +175,8 @@ async def process_campaign(
     """
     Manually trigger campaign processing for the current day.
 
-    This is useful for testing. In production, this should be triggered by a cron job.
+    This bypasses the scheduled send time and sends immediately.
+    Useful for testing. In production, scheduled sends are triggered by a cron job.
     """
     result = await session.execute(select(Campaign).where(Campaign.id == campaign_id))
     campaign = result.scalar_one_or_none()
@@ -183,13 +185,108 @@ async def process_campaign(
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     scheduler = WarmupScheduler(session)
-    emails_sent = await scheduler.process_campaign(campaign)
+    # Use force=True to bypass next_send_time check for manual sends
+    emails_sent = await scheduler.process_campaign(campaign, force=True)
 
     return {
         "campaign_id": campaign_id,
         "emails_sent": emails_sent,
         "emails_sent_today": campaign.emails_sent_today,
         "target_emails_today": campaign.target_emails_today,
+    }
+
+
+@router.get("/{campaign_id}/sender-stats")
+async def get_campaign_sender_stats(
+    campaign_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Get detailed statistics for each sender in a campaign.
+
+    Returns per-sender metrics including emails sent, open rates, bounce rates, etc.
+    """
+    from sqlalchemy import func
+    from warmit.models.email import Email, EmailStatus
+
+    # Get campaign
+    result = await session.execute(select(Campaign).where(Campaign.id == campaign_id))
+    campaign = result.scalar_one_or_none()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    # Get sender accounts
+    result = await session.execute(
+        select(Account).where(Account.id.in_(campaign.sender_account_ids))
+    )
+    senders = result.scalars().all()
+
+    sender_stats = []
+
+    for sender in senders:
+        # Count emails sent by this sender in this campaign
+        emails_sent_result = await session.execute(
+            select(func.count(Email.id))
+            .where(Email.sender_id == sender.id)
+            .where(Email.campaign_id == campaign_id)
+        )
+        emails_sent = emails_sent_result.scalar() or 0
+
+        # Count opened emails
+        emails_opened_result = await session.execute(
+            select(func.count(Email.id))
+            .where(Email.sender_id == sender.id)
+            .where(Email.campaign_id == campaign_id)
+            .where(Email.opened_at.isnot(None))
+        )
+        emails_opened = emails_opened_result.scalar() or 0
+
+        # Count replied emails
+        emails_replied_result = await session.execute(
+            select(func.count(Email.id))
+            .where(Email.sender_id == sender.id)
+            .where(Email.campaign_id == campaign_id)
+            .where(Email.replied_at.isnot(None))
+        )
+        emails_replied = emails_replied_result.scalar() or 0
+
+        # Count bounced emails
+        emails_bounced_result = await session.execute(
+            select(func.count(Email.id))
+            .where(Email.sender_id == sender.id)
+            .where(Email.campaign_id == campaign_id)
+            .where(Email.status == EmailStatus.BOUNCED)
+        )
+        emails_bounced = emails_bounced_result.scalar() or 0
+
+        # Calculate rates
+        open_rate = (emails_opened / emails_sent * 100) if emails_sent > 0 else 0
+        reply_rate = (emails_replied / emails_sent * 100) if emails_sent > 0 else 0
+        bounce_rate = (emails_bounced / emails_sent * 100) if emails_sent > 0 else 0
+
+        sender_stats.append({
+            "sender_id": sender.id,
+            "sender_email": sender.email,
+            "sender_name": sender.full_name,
+            "domain": sender.domain,
+            "domain_age_days": sender.domain_age_days,
+            "status": sender.status.value,
+            "emails_sent": emails_sent,
+            "emails_opened": emails_opened,
+            "emails_replied": emails_replied,
+            "emails_bounced": emails_bounced,
+            "open_rate": round(open_rate, 2),
+            "reply_rate": round(reply_rate, 2),
+            "bounce_rate": round(bounce_rate, 2),
+            "total_sent_overall": sender.total_sent,
+            "bounce_rate_overall": round(sender.bounce_rate * 100, 2),
+        })
+
+    return {
+        "campaign_id": campaign_id,
+        "campaign_name": campaign.name,
+        "sender_stats": sender_stats,
     }
 
 

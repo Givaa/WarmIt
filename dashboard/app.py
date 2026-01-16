@@ -84,7 +84,6 @@ if not st.session_state.authenticated:
         if is_new:
             st.success("✅ First time setup! Admin password generated.")
             st.info("🔑 Check the application logs for your admin password.")
-            st.warning("⚠️ The password is also saved in `dashboard/first_run_password.txt` and will be deleted after first login.")
 
         with st.form("login_form"):
             password_input = st.text_input(
@@ -127,8 +126,7 @@ if not st.session_state.authenticated:
                     st.error("⚠️ Please enter a password")
 
         st.markdown("---")
-        st.caption("💡 **First time?** Check logs for generated password")
-        st.caption("📁 Logs location: `docker/logs/dashboard.log` or console output")
+        st.caption("💡 **First time?** Check server logs for generated password")
 
     st.stop()
 
@@ -303,11 +301,44 @@ def process_campaign(campaign_id):
     try:
         response = requests.post(
             f"{API_BASE_URL}/api/campaigns/{campaign_id}/process",
-            timeout=60  # 60 second timeout for processing
+            timeout=300  # 5 minute timeout (email sending can take time with AI generation and SMTP)
         )
-        return response.ok, response.json() if response.ok else response.text
+
+        # Check if request was successful (2xx status code)
+        if response.status_code >= 200 and response.status_code < 300:
+            try:
+                return True, response.json()
+            except:
+                return True, {"emails_sent": 0, "message": "Success"}
+        else:
+            try:
+                error_detail = response.json().get('detail', response.text)
+            except:
+                error_detail = response.text
+            return False, error_detail
     except requests.exceptions.Timeout:
-        return False, "Request timed out. Check API logs for campaign status."
+        return False, "Operation is taking longer than expected. The emails may still be sending in the background. Please check the campaign status in a few minutes."
+    except Exception as e:
+        return False, str(e)
+
+
+def get_campaign_sender_stats(campaign_id):
+    """Get detailed sender statistics for a campaign."""
+    try:
+        response = requests.get(f"{API_BASE_URL}/api/campaigns/{campaign_id}/sender-stats")
+        return response.json() if response.ok else None
+    except Exception as e:
+        st.error(f"Error fetching sender stats: {e}")
+        return None
+
+
+def delete_campaign(campaign_id):
+    """Delete a campaign."""
+    try:
+        response = requests.delete(
+            f"{API_BASE_URL}/api/campaigns/{campaign_id}"
+        )
+        return response.status_code == 204, response.text if response.status_code != 204 else "Deleted"
     except Exception as e:
         return False, str(e)
 
@@ -320,10 +351,10 @@ with st.sidebar:
     # API Health Check
     api_healthy = check_api_health()
     if api_healthy:
-        st.success("✅ API Online")
+        st.success("✅ Service Online")
     else:
-        st.error("❌ API Offline")
-        st.warning("Make sure the API server is running on http://localhost:8000")
+        st.error("❌ Service Unavailable")
+        st.warning("The application backend is not responding. Please contact your administrator.")
         st.stop()
 
     st.markdown("---")
@@ -337,9 +368,10 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Auto-refresh with session state persistence
+    # Auto-refresh with query param persistence
     if 'auto_refresh' not in st.session_state:
-        st.session_state.auto_refresh = False
+        # Check query params first
+        st.session_state.auto_refresh = query_params.get('auto_refresh') == 'true'
 
     auto_refresh = st.checkbox(
         "Auto-refresh (30s)",
@@ -347,12 +379,16 @@ with st.sidebar:
         key='auto_refresh_checkbox'
     )
 
-    # Update session state when checkbox changes
+    # Update both session state and query params when checkbox changes
     if auto_refresh != st.session_state.auto_refresh:
         st.session_state.auto_refresh = auto_refresh
+        if auto_refresh:
+            st.query_params['auto_refresh'] = 'true'
+        else:
+            st.query_params.pop('auto_refresh', None)
 
     if auto_refresh:
-        st.info("Dashboard refreshes every 30 seconds")
+        st.info("🔄 Auto-refresh enabled (30s)")
 
     # Footer
     st.markdown("---")
@@ -641,6 +677,111 @@ elif page == "🎯 Campaigns":
                 lang_display = "🇬🇧 English" if lang == "en" else "🇮🇹 Italiano"
                 st.write("**Language:**", lang_display)
 
+                # Display next send time if available
+                if camp.get('next_send_time'):
+                    next_send = camp.get('next_send_time')
+                    try:
+                        from datetime import datetime
+                        from zoneinfo import ZoneInfo
+                        # Parse the ISO timestamp and convert to Italy time
+                        next_dt = datetime.fromisoformat(next_send.replace('Z', '+00:00'))
+                        italy_tz = ZoneInfo("Europe/Rome")
+                        next_italy = next_dt.astimezone(italy_tz)
+                        st.write("**Next Send:**", next_italy.strftime("%Y-%m-%d %H:%M"))
+                    except:
+                        st.write("**Next Send:**", str(next_send)[:16])
+
+            st.markdown("---")
+
+            # Sender Statistics Section
+            st.subheader("📊 Per-Sender Statistics")
+
+            sender_stats_data = get_campaign_sender_stats(camp['id'])
+
+            if sender_stats_data and sender_stats_data.get('sender_stats'):
+                sender_stats = sender_stats_data['sender_stats']
+
+                # Create DataFrame for better visualization
+                import pandas as pd
+                df = pd.DataFrame(sender_stats)
+
+                # Reorder columns for better readability
+                column_order = [
+                    'sender_email',
+                    'domain_age_days',
+                    'emails_sent',
+                    'emails_opened',
+                    'open_rate',
+                    'emails_replied',
+                    'reply_rate',
+                    'emails_bounced',
+                    'bounce_rate',
+                    'status'
+                ]
+
+                # Filter to only existing columns
+                available_columns = [col for col in column_order if col in df.columns]
+                df_display = df[available_columns].copy()
+
+                # Rename columns for display
+                df_display.columns = [
+                    'Sender',
+                    'Domain Age (days)',
+                    'Sent',
+                    'Opened',
+                    'Open %',
+                    'Replied',
+                    'Reply %',
+                    'Bounced',
+                    'Bounce %',
+                    'Status'
+                ]
+
+                # Format the dataframe
+                st.dataframe(
+                    df_display,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                # Summary metrics in columns
+                st.markdown("**Summary:**")
+                col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+
+                total_sent = sum(s['emails_sent'] for s in sender_stats)
+                total_opened = sum(s['emails_opened'] for s in sender_stats)
+                total_replied = sum(s['emails_replied'] for s in sender_stats)
+                total_bounced = sum(s['emails_bounced'] for s in sender_stats)
+
+                with col_s1:
+                    st.metric("Total Sent", total_sent)
+                with col_s2:
+                    avg_open = (total_opened / total_sent * 100) if total_sent > 0 else 0
+                    st.metric("Avg Open Rate", f"{avg_open:.1f}%")
+                with col_s3:
+                    avg_reply = (total_replied / total_sent * 100) if total_sent > 0 else 0
+                    st.metric("Avg Reply Rate", f"{avg_reply:.1f}%")
+                with col_s4:
+                    avg_bounce = (total_bounced / total_sent * 100) if total_sent > 0 else 0
+                    st.metric("Avg Bounce Rate", f"{avg_bounce:.1f}%")
+
+                # Health warnings
+                high_bounce_senders = [s for s in sender_stats if s['bounce_rate'] > 5]
+                if high_bounce_senders:
+                    st.warning(f"⚠️ {len(high_bounce_senders)} sender(s) have bounce rate > 5%")
+                    for sender in high_bounce_senders:
+                        st.caption(f"  • {sender['sender_email']}: {sender['bounce_rate']:.1f}% bounce rate")
+
+                low_open_senders = [s for s in sender_stats if s['emails_sent'] > 10 and s['open_rate'] < 10]
+                if low_open_senders:
+                    st.info(f"ℹ️ {len(low_open_senders)} sender(s) have open rate < 10% (with 10+ emails sent)")
+                    for sender in low_open_senders:
+                        st.caption(f"  • {sender['sender_email']}: {sender['open_rate']:.1f}% open rate")
+            else:
+                st.info("No sender statistics available yet. Send some emails first!")
+
+            st.markdown("---")
+
             # Actions
             col1, col2, col3, col4 = st.columns(4)
 
@@ -669,7 +810,38 @@ elif page == "🎯 Campaigns":
                             time.sleep(1)
                             st.rerun()
                         else:
-                            st.error(f"Failed: {result}")
+                            # Check if it's a timeout message (not a real error)
+                            if isinstance(result, str) and ("taking longer than expected" in result.lower() or "background" in result.lower()):
+                                st.warning(result)
+                            else:
+                                st.error(f"Failed: {result}")
+
+            with col3:
+                if st.button("🗑️ Delete", key=f"delete_c_{camp['id']}", type="secondary"):
+                    # Use a confirmation dialog
+                    if 'confirm_delete_campaign' not in st.session_state:
+                        st.session_state.confirm_delete_campaign = None
+
+                    st.session_state.confirm_delete_campaign = camp['id']
+
+            # Show confirmation dialog if delete was clicked
+            if st.session_state.get('confirm_delete_campaign') == camp['id']:
+                st.warning(f"⚠️ Are you sure you want to delete campaign '{camp.get('name')}'?")
+                col_yes, col_no = st.columns(2)
+                with col_yes:
+                    if st.button("✅ Yes, delete", key=f"confirm_yes_{camp['id']}"):
+                        success, _ = delete_campaign(camp['id'])
+                        if success:
+                            st.success("Campaign deleted")
+                            st.session_state.confirm_delete_campaign = None
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete campaign")
+                with col_no:
+                    if st.button("❌ Cancel", key=f"confirm_no_{camp['id']}"):
+                        st.session_state.confirm_delete_campaign = None
+                        st.rerun()
 
 
 elif page == "📈 Analytics":
@@ -867,22 +1039,23 @@ elif page == "➕ Add New":
         with st.form("create_campaign"):
             name = st.text_input("Campaign Name*", placeholder="My First Campaign")
 
-            col1, col2 = st.columns(2)
+            # Sender accounts (full width to avoid layout issues)
+            sender_ids = st.multiselect(
+                "Sender Accounts*",
+                options=[s['id'] for s in senders],
+                format_func=lambda x: next(s['email'] for s in senders if s['id'] == x),
+                help="Select one or more sender accounts to warm up"
+            )
 
-            with col1:
-                sender_ids = st.multiselect(
-                    "Sender Accounts*",
-                    options=[s['id'] for s in senders],
-                    format_func=lambda x: next(s['email'] for s in senders if s['id'] == x)
-                )
+            # Receiver accounts (full width to avoid layout issues)
+            receiver_ids = st.multiselect(
+                "Receiver Accounts*",
+                options=[r['id'] for r in receivers],
+                format_func=lambda x: next(r['email'] for r in receivers if r['id'] == x),
+                help="Select one or more receiver accounts"
+            )
 
-            with col2:
-                receiver_ids = st.multiselect(
-                    "Receiver Accounts*",
-                    options=[r['id'] for r in receivers],
-                    format_func=lambda x: next(r['email'] for r in receivers if r['id'] == x)
-                )
-
+            # Duration and language in columns
             col_d1, col_d2 = st.columns(2)
 
             with col_d1:
@@ -1113,16 +1286,15 @@ elif page == "🧪 Quick Test":
 
                 st.error("❌ Request timed out after 2 minutes")
                 st.warning("This may happen with multiple emails and replies. The emails might still be sending in the background.")
-                st.info("💡 Check API logs with: `docker compose -f docker/docker-compose.prod.yml logs api`")
+                st.info("💡 Check server logs for details")
 
             except requests.exceptions.ConnectionError:
                 # Clear progress and status
                 status_placeholder.empty()
                 progress_placeholder.empty()
 
-                st.error("❌ Cannot connect to API")
-                st.warning(f"Make sure the API is running at {API_BASE_URL}")
-                st.info("💡 Check API status with: `docker compose -f docker/docker-compose.prod.yml ps api`")
+                st.error("❌ Service Error")
+                st.warning("Cannot connect to the backend service. Please try again later or contact your administrator.")
 
             except Exception as e:
                 # Clear progress and status
@@ -1432,13 +1604,18 @@ elif page == "💰 API Costs":
 
     # Import dependencies
     # In Docker, warmit is at /app/warmit (parent.parent from dashboard/app.py)
-    sys.path.insert(0, str(Path(__file__).parent.parent))
-    from warmit.services.rate_limit_tracker import get_rate_limit_tracker
-    from warmit.services.config_profiles import get_profile_manager
+    try:
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from warmit.services.rate_limit_tracker import get_rate_limit_tracker
+        from warmit.services.config_profiles import get_profile_manager
 
-    # Get tracker
-    tracker = get_rate_limit_tracker()
-    statuses = tracker.get_all_statuses()
+        # Get tracker
+        tracker = get_rate_limit_tracker()
+        statuses = tracker.get_all_statuses()
+    except Exception as e:
+        st.error(f"Failed to load rate limit tracker: {e}")
+        st.info("Make sure the API and services are running properly")
+        st.stop()
 
     # Overall status
     st.subheader("📊 Overall Status")
@@ -1539,7 +1716,7 @@ elif page == "💰 API Costs":
 
             # Actions
             if st.button(f"Reset {provider_name} counters", key=f"reset_{provider_name}"):
-                tracker.reset_provider(provider_name)
+                tracker.reset_key(provider_name)
                 st.success(f"Reset {provider_name} counters")
                 st.rerun()
 
@@ -1553,8 +1730,12 @@ elif page == "💰 API Costs":
     num_senders = len([a for a in accounts_data if a.get('type') == 'sender']) if accounts_data else 10
 
     # Get recommended profile
-    profile_manager = get_profile_manager()
-    recommended_profile = profile_manager.get_recommended_profile(num_senders)
+    try:
+        profile_manager = get_profile_manager()
+        recommended_profile = profile_manager.get_recommended_profile(num_senders)
+    except Exception as e:
+        st.warning(f"Could not load configuration profiles: {e}")
+        recommended_profile = None
 
     if recommended_profile:
         st.info(f"**Recommended Profile:** {recommended_profile.name.upper()}")
@@ -1594,6 +1775,12 @@ elif page == "💰 API Costs":
         st.markdown("- Wait for daily reset")
         st.markdown("- Switch to alternative provider")
         st.markdown("- Use local template fallback")
+
+    # Show message when everything is OK
+    if not recommended_profile and not high_usage_providers and not exhausted_providers:
+        st.success("✅ All systems operating normally. No optimization needed at this time.")
+    elif not high_usage_providers and not exhausted_providers:
+        st.success("✅ No issues detected. Your API usage is within safe limits.")
 
     st.markdown("---")
 
@@ -1830,7 +2017,7 @@ elif page == "⚙️ Settings":
             st.metric("API Status", "🟢 Online" if check_api_health() else "🔴 Offline")
 
         with col_b:
-            st.metric("API URL", "http://localhost:8000")
+            st.metric("Backend", "Connected" if check_api_health() else "Disconnected")
 
         with col_c:
             italy_tz = ZoneInfo("Europe/Rome")
@@ -1842,27 +2029,31 @@ elif page == "⚙️ Settings":
 st.markdown("---")
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.caption("🔥 WarmIt Dashboard v0.1.0")
+    st.caption("🔥 WarmIt Dashboard v0.2.2")
 with col2:
-    st.caption("📡 API: http://localhost:8000")
+    st.caption("📡 Status: " + ("Online" if check_api_health() else "Offline"))
 with col3:
     # Use Rome/Italy timezone for display
     italy_tz = ZoneInfo("Europe/Rome")
     now_italy = datetime.now(italy_tz)
     st.caption("🔄 Last updated: " + now_italy.strftime("%H:%M:%S"))
 
-# Auto-refresh with proper implementation
+# Auto-refresh with proper implementation using JavaScript
 if auto_refresh:
-    # Use st.empty() placeholder to avoid stacking
     import streamlit.components.v1 as components
 
-    # JavaScript-based refresh that reloads the page cleanly
+    # Use JavaScript timer that triggers Streamlit rerun via query param update
+    # This approach doesn't block and allows clean page transitions
     components.html(
-        """
+        f"""
         <script>
-        setTimeout(function() {
-            window.parent.location.reload();
-        }, 30000);  // 30 seconds
+        // Wait 30 seconds, then trigger rerun by updating a timestamp param
+        setTimeout(function() {{
+            const url = new URL(window.parent.location);
+            // Update a timestamp to force Streamlit to rerun
+            url.searchParams.set('_refresh', Date.now());
+            window.parent.location.href = url.toString();
+        }}, 30000);
         </script>
         """,
         height=0

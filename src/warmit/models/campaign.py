@@ -47,6 +47,10 @@ class Campaign(Base, TimestampMixin):
         DateTime(timezone=True),
         nullable=True
     )
+    next_send_time: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True
+    )
 
     # Statistics
     total_emails_sent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

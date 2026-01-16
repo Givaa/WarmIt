@@ -96,6 +96,7 @@ Currently, WarmIt does not use a formal migration framework like Alembic. To rol
 | ID | Name | Date | Description |
 |----|------|------|-------------|
 | 001 | add_campaign_language | 2026-01-15 | Add language support for campaigns (EN/IT) |
+| 002 | add_next_send_time | 2026-01-16 | Add scheduling fields for random email timing |
 
 ---
 

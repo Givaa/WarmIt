@@ -30,6 +30,9 @@ COPY src/warmit/ ./warmit/
 # Copy scripts (needed for estimate_resources import)
 COPY scripts/ ./scripts/
 
+# Copy config profiles (needed for config_profiles.py)
+COPY config/ ./config/
+
 # Copy dashboard code
 COPY dashboard/ ./dashboard/
 

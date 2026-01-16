@@ -63,6 +63,7 @@ class Email(Base, TimestampMixin):
     is_warmup: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Timing
+    scheduled_send_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     opened_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

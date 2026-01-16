@@ -126,7 +126,7 @@ def get_or_create_password() -> Tuple[str, bool]:
             f.write(f"This file will be automatically deleted after first successful login.\n")
         log_file.chmod(0o600)
 
-        logger.info(f"💾 Password also saved temporarily to: {log_file}")
+        logger.info(f"💾 Password also saved temporarily to a secure file")
         logger.info("   (This file will be deleted after first successful login)")
 
         return password_hash, True
