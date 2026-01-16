@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     max_bounce_rate: float = 0.05
     auto_pause_on_high_bounce: bool = True
 
+    # Tracking
+    api_base_url: str = "http://localhost:8000"  # Base URL for tracking pixels
+
     @property
     def ai_api_key(self) -> str:
         """Get the appropriate API key based on provider."""
@@ -71,29 +74,39 @@ class Settings(BaseSettings):
             return "https://api.openai.com/v1"
         return ""
 
+    def _is_valid_api_key(self, key: str) -> bool:
+        """Check if an API key is valid (not empty or placeholder)."""
+        if not key or not key.strip():
+            return False
+        # Reject placeholder values
+        invalid_patterns = ["your_", "change_this", "example", "placeholder", "xxx"]
+        key_lower = key.lower()
+        return not any(pattern in key_lower for pattern in invalid_patterns)
+
     def get_all_api_configs(self) -> list[dict[str, str]]:
         """
         Get all available API configurations in priority order.
         Returns list of dicts with 'provider', 'api_key', 'base_url', 'model'.
+        Only includes valid API keys (not empty or placeholders).
         """
         configs = []
 
         # OpenRouter keys
-        if self.openrouter_api_key:
+        if self._is_valid_api_key(self.openrouter_api_key):
             configs.append({
                 "provider": "openrouter_1",
                 "api_key": self.openrouter_api_key,
                 "base_url": "https://openrouter.ai/api/v1",
                 "model": self.ai_model,
             })
-        if self.openrouter_api_key_2:
+        if self._is_valid_api_key(self.openrouter_api_key_2):
             configs.append({
                 "provider": "openrouter_2",
                 "api_key": self.openrouter_api_key_2,
                 "base_url": "https://openrouter.ai/api/v1",
                 "model": self.ai_model,
             })
-        if self.openrouter_api_key_3:
+        if self._is_valid_api_key(self.openrouter_api_key_3):
             configs.append({
                 "provider": "openrouter_3",
                 "api_key": self.openrouter_api_key_3,
@@ -102,14 +115,14 @@ class Settings(BaseSettings):
             })
 
         # Groq keys
-        if self.groq_api_key:
+        if self._is_valid_api_key(self.groq_api_key):
             configs.append({
                 "provider": "groq_1",
                 "api_key": self.groq_api_key,
                 "base_url": "https://api.groq.com/openai/v1",
                 "model": self.groq_model,
             })
-        if self.groq_api_key_2:
+        if self._is_valid_api_key(self.groq_api_key_2):
             configs.append({
                 "provider": "groq_2",
                 "api_key": self.groq_api_key_2,
@@ -118,7 +131,7 @@ class Settings(BaseSettings):
             })
 
         # OpenAI key
-        if self.openai_api_key:
+        if self._is_valid_api_key(self.openai_api_key):
             configs.append({
                 "provider": "openai_1",
                 "api_key": self.openai_api_key,

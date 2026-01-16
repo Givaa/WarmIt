@@ -25,7 +25,13 @@ def process_responses() -> dict:
             results = await bot.process_all_receivers()
             return results
 
-    results = asyncio.run(_process())
+    # Use get_event_loop instead of asyncio.run to avoid event loop conflicts
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        results = loop.run_until_complete(_process())
+    finally:
+        loop.close()
     total_processed = sum(results.values())
 
     logger.info(f"Processed {total_processed} emails across {len(results)} receiver accounts")

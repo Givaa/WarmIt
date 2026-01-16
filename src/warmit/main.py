@@ -8,7 +8,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from warmit.api import accounts, campaigns, metrics, test
+from warmit.api import accounts, campaigns, metrics, test, tracking
 from warmit.database import init_db, get_session
 from warmit.config import settings
 from warmit.services.health_monitor import HealthMonitor
@@ -61,6 +61,7 @@ app.include_router(accounts.router, prefix="/api/accounts", tags=["accounts"])
 app.include_router(campaigns.router, prefix="/api/campaigns", tags=["campaigns"])
 app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])
 app.include_router(test.router, prefix="/api/test", tags=["test"])
+app.include_router(tracking.router, tags=["tracking"])
 
 
 @app.get("/")

@@ -2,14 +2,17 @@
 
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.pool import NullPool
 from warmit.config import settings
 from warmit.models.base import Base
 
-# Create async engine
+# Create async engine with NullPool to avoid connection pool issues
+# in Celery workers that create new event loops
 engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
     future=True,
+    poolclass=NullPool,  # Disable connection pooling for Celery compatibility
 )
 
 # Create async session factory

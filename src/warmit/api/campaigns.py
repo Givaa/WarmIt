@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from warmit.database import get_session
 from warmit.models.campaign import Campaign, CampaignStatus
+from warmit.models.account import Account
 from warmit.services.scheduler import WarmupScheduler
 
 

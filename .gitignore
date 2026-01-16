@@ -55,6 +55,16 @@ dashboard/.auth
 dashboard/.sessions
 dashboard/first_run_password.txt
 
+# Docker
+docker/.env
+docker/logs/
+
 # OS
 .DS_Store
 Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup

@@ -10,7 +10,7 @@ celery_app = Celery(
     "warmit",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["warmit.tasks.warming", "warmit.tasks.response"],
+    include=["warmit.tasks.warming", "warmit.tasks.response", "warmit.tasks.bounce"],
 )
 
 # Configure Celery
@@ -29,6 +29,11 @@ celery_app.conf.update(
         # Check for responses every 30 minutes
         "process-responses": {
             "task": "warmit.tasks.response.process_responses",
+            "schedule": 1800.0,  # Every 30 minutes
+        },
+        # Check for bounces every 30 minutes
+        "detect-bounces": {
+            "task": "warmit.tasks.bounce.detect_bounces",
             "schedule": 1800.0,  # Every 30 minutes
         },
         # Reset daily counters at midnight

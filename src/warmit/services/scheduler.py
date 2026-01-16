@@ -340,17 +340,24 @@ class WarmupScheduler:
             logger.error("No sender or receiver accounts found")
             return 0
 
+        logger.info(f"Campaign {campaign.id}: {len(senders)} senders, {len(receivers)} receivers, target count={count}")
+
         sent_count = 0
 
         # Distribute emails across senders
         emails_per_sender = count // len(senders)
         remainder = count % len(senders)
+        logger.info(f"Campaign {campaign.id}: emails_per_sender={emails_per_sender}, remainder={remainder}")
 
+        # Create a list of (sender, count) tuples
+        sender_allocations = []
         for i, sender in enumerate(senders):
             # Calculate how many to send for this sender
             sender_count = emails_per_sender
             if i < remainder:
                 sender_count += 1
+
+            logger.info(f"Campaign {campaign.id}: Sender {i} ({sender.email}): allocated {sender_count} emails, bounce_rate={sender.bounce_rate:.2%}")
 
             # Check bounce rate
             if sender.bounce_rate > settings.max_bounce_rate:
@@ -362,64 +369,96 @@ class WarmupScheduler:
                     await self.session.commit()
                 continue
 
-            # Send emails
+            # Add to allocations
             for _ in range(sender_count):
-                # Pick random receiver
-                receiver = random.choice(receivers)
+                sender_allocations.append(sender)
 
-                # Generate email content with sender's name and campaign language
-                content = await self.ai_generator.generate_email(
-                    sender_name=sender.full_name,
-                    language=campaign.language  # type: ignore
-                )
+        # Randomize the order to avoid same sender sending consecutively
+        random.shuffle(sender_allocations)
 
-                # Create message
-                message = EmailMessage(
-                    sender=sender.email,
-                    receiver=receiver.email,
-                    subject=content.subject,
-                    body=content.body,
-                )
+        logger.info(f"Campaign {campaign.id}: Will send {len(sender_allocations)} emails in randomized order")
 
-                # Send email (decrypt password for SMTP)
-                success = await self.email_service.send_email(
-                    smtp_host=sender.smtp_host,
-                    smtp_port=sender.smtp_port,
-                    username=sender.email,
-                    password=sender.get_password(),
-                    message=message,
-                    use_tls=sender.smtp_use_tls,
-                )
+        # Send emails in randomized order
+        for idx, sender in enumerate(sender_allocations, 1):
+            logger.info(f"Campaign {campaign.id}: Processing email {idx}/{len(sender_allocations)}")
+            # Pick random receiver
+            receiver = random.choice(receivers)
 
-                if success:
-                    # Record in database
-                    email_record = Email(
-                        sender_id=sender.id,
-                        receiver_id=receiver.id,
-                        campaign_id=campaign.id,
-                        subject=content.subject,
-                        body=content.body,
-                        message_id=message.message_id,
-                        status=EmailStatus.SENT,
-                        is_warmup=True,
-                        ai_generated=True,
-                        ai_prompt=content.prompt,
-                        ai_model=content.model,
-                        sent_at=datetime.now(timezone.utc),
-                    )
-                    self.session.add(email_record)
+            # Generate email content with sender's name and campaign language
+            content = await self.ai_generator.generate_email(
+                sender_name=sender.full_name,
+                language=campaign.language  # type: ignore
+            )
 
-                    # Update sender stats
-                    sender.total_sent += 1
-                    sent_count += 1
+            # Create temporary message for message_id
+            temp_message = EmailMessage(
+                sender=sender.email,
+                receiver=receiver.email,
+                subject=content.subject,
+                body=content.body,
+            )
 
-                    # Add small delay between emails (human-like behavior)
-                    import asyncio
-                    await asyncio.sleep(random.uniform(30, 120))  # 30s - 2min
+            # Create email record FIRST to get ID for tracking
+            email_record = Email(
+                sender_id=sender.id,
+                receiver_id=receiver.id,
+                campaign_id=campaign.id,
+                subject=content.subject,
+                body=content.body,
+                message_id=temp_message.message_id,
+                status=EmailStatus.PENDING,
+                is_warmup=True,
+                ai_generated=True,
+                ai_prompt=content.prompt,
+                ai_model=content.model,
+            )
+            self.session.add(email_record)
+            await self.session.flush()  # Get ID without committing
 
-                else:
-                    # Record failure
-                    sender.total_bounced += 1
+            # Build tracking URL
+            tracking_url = f"{settings.api_base_url}/track/open/{email_record.id}"
+
+            # Create message with tracking pixel
+            message = EmailMessage(
+                sender=sender.email,
+                receiver=receiver.email,
+                subject=content.subject,
+                body=content.body,
+                message_id=temp_message.message_id,
+                tracking_url=tracking_url,
+            )
+
+            # Send email (decrypt password for SMTP)
+            success = await self.email_service.send_email(
+                smtp_host=sender.smtp_host,
+                smtp_port=sender.smtp_port,
+                username=sender.email,
+                password=sender.get_password(),
+                message=message,
+                use_tls=sender.smtp_use_tls,
+            )
+
+            if success:
+                # Update status to SENT
+                email_record.status = EmailStatus.SENT
+                email_record.sent_at = datetime.now(timezone.utc)
+
+                # Update sender stats
+                sender.total_sent += 1
+                sent_count += 1
+
+                logger.debug(f"Email {email_record.id} sent with tracking URL: {tracking_url}")
+
+                # Add delay between emails (human-like behavior)
+                # Longer delays make the pattern less suspicious
+                import asyncio
+                # Production delays: 2-10 minutes between emails
+                await asyncio.sleep(random.uniform(120, 600))  # 2-10 minutes
+
+            else:
+                # Mark as failed
+                email_record.status = EmailStatus.BOUNCED
+                sender.total_bounced += 1
 
         await self.session.commit()
         return sent_count

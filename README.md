@@ -235,16 +235,22 @@ Dashboard (8501) ──► API (8000) ──► PostgreSQL
 - 🔐 [Security Setup Guide](docs/SECURITY_SETUP.md) - Authentication & encryption
 - 🧮 [Resource Estimation](docs/RESOURCE_ESTIMATION.md) - Campaign planning tool
 
-**Project Files:**
-- 🗺️ [Project Structure](PROJECT_STRUCTURE.md) - Complete codebase map
-- 📋 [Changelog](CHANGELOG.md) - Version history and changes
-- 📝 [TODO](TODO.md) - Roadmap and future features
-- 🔧 [Scripts Documentation](scripts/README.md) - Utility scripts guide
+**Setup Guides:**
+- 🔑 [API Keys Setup](docs/setup/API_KEYS.md) - Configure AI providers
+- 📊 [Tracking Setup](docs/setup/TRACKING_SETUP.md) - Email tracking configuration
+
+**Project Documentation:**
+- 🗺️ [Project Structure](docs/PROJECT_STRUCTURE.md) - Complete codebase map
+- 📋 [Changelog](docs/changelog/CHANGELOG.md) - Version history and changes
+- 📝 [TODO](docs/TODO.md) - Roadmap and future features
+- 🔧 [Implementation Notes](docs/guides/IMPLEMENTATION_NOTES.md) - Technical details
+- ⬆️ [Upgrade Guide v0.2.2](docs/guides/UPGRADE_TO_v0.2.2.md) - Migration instructions
 
 **Configuration:**
 - ⚙️ [Environment Variables](.env.example) - All configuration options
 - 📋 [Configuration Profiles](config/profiles/) - Small/Medium/Large/Enterprise presets
 - 🐳 [Docker Compose](docker/docker-compose.prod.yml) - Production deployment
+- 🔧 [Scripts Documentation](scripts/README.md) - Utility scripts guide
 
 ---
 

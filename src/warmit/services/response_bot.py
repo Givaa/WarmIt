@@ -4,7 +4,7 @@ import logging
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from warmit.models.account import Account, AccountStatus, AccountType
 from warmit.models.email import Email, EmailStatus
@@ -65,6 +65,7 @@ class ResponseBot:
             return 0
 
         processed_count = 0
+        emails_to_mark_unread = []  # Track emails we didn't respond to
 
         for email_data in unread_emails:
             try:
@@ -78,29 +79,38 @@ class ResponseBot:
 
                     if success:
                         processed_count += 1
-                        # Mark as read (decrypt password for IMAP)
-                        await self.email_service.mark_as_read(
-                            imap_host=account.imap_host,
-                            imap_port=account.imap_port,
-                            username=account.email,
-                            password=account.get_password(),
-                            message_id=email_data["message_id"],
-                            use_ssl=account.imap_use_ssl,
-                        )
+                        # Email stays as \Seen since we responded
+                    else:
+                        # Failed to respond, mark for unread restoration
+                        if "imap_id" in email_data:
+                            emails_to_mark_unread.append(email_data["imap_id"])
                 else:
-                    # Just mark as read without responding (decrypt password for IMAP)
-                    await self.email_service.mark_as_read(
-                        imap_host=account.imap_host,
-                        imap_port=account.imap_port,
-                        username=account.email,
-                        password=account.get_password(),
-                        message_id=email_data["message_id"],
-                        use_ssl=account.imap_use_ssl,
-                    )
+                    # Decided not to respond (15% chance), mark for unread restoration
+                    if "imap_id" in email_data:
+                        emails_to_mark_unread.append(email_data["imap_id"])
 
             except Exception as e:
                 logger.error(f"Failed to process email: {e}")
                 continue
+
+        # Re-mark emails as unread if we didn't respond to them
+        # This is needed because RFC822 fetch automatically marks as \Seen
+        if emails_to_mark_unread:
+            try:
+                import aioimaplib
+                imap = aioimaplib.IMAP4_SSL(account.imap_host, account.imap_port) if account.imap_use_ssl else aioimaplib.IMAP4(account.imap_host, account.imap_port)
+                await imap.wait_hello_from_server()
+                await imap.login(account.email, account.get_password())
+                await imap.select("INBOX")
+
+                for imap_id in emails_to_mark_unread:
+                    await imap.store(imap_id, "-FLAGS", "(\\Seen)")
+                    logger.debug(f"Re-marked email {imap_id} as unread")
+
+                await imap.logout()
+                logger.info(f"Re-marked {len(emails_to_mark_unread)} emails as unread")
+            except Exception as e:
+                logger.error(f"Failed to re-mark emails as unread: {e}")
 
         # Update account statistics
         account.total_received += len(unread_emails)
@@ -150,15 +160,19 @@ class ResponseBot:
         """
         # Check if this is a warmup email (from our sender accounts)
         sender_email = email_data.get("from", "")
+        logger.debug(f"Checking if should respond to email from: {sender_email}")
 
         # Extract email address from "Name <email>" format
         if "<" in sender_email:
             sender_email = sender_email.split("<")[1].split(">")[0]
 
-        # Check if sender is one of our warmup accounts
+        sender_email = sender_email.strip().lower()
+        logger.debug(f"Extracted sender email: {sender_email}")
+
+        # Check if sender is one of our warmup accounts (case-insensitive)
         result = await self.session.execute(
             select(Account).where(
-                Account.email == sender_email,
+                func.lower(Account.email) == sender_email,
                 Account.type == AccountType.SENDER,
             )
         )
@@ -167,7 +181,11 @@ class ResponseBot:
         # Only respond to emails from our warmup sender accounts
         if sender_account:
             # Respond to 80-90% of emails to simulate human behavior
-            return random.random() < 0.85
+            should_respond = random.random() < 0.85
+            logger.info(f"Email from warmup sender {sender_email}, responding: {should_respond}")
+            return should_respond
+        else:
+            logger.debug(f"Email from {sender_email} is not from a warmup sender account, skipping")
 
         return False
 
@@ -199,13 +217,18 @@ class ResponseBot:
                 return False
 
             # Find the campaign this email belongs to
+            # Get all campaigns and filter in Python since JSON operator is tricky
             result = await self.session.execute(
-                select(Campaign).where(
-                    Campaign.sender_account_ids.contains([sender_account.id]),
-                    Campaign.receiver_account_ids.contains([account.id])
-                ).order_by(Campaign.created_at.desc())
+                select(Campaign).where(Campaign.status == "active").order_by(Campaign.created_at.desc())
             )
-            campaign = result.scalar_one_or_none()
+            campaigns = result.scalars().all()
+
+            # Find matching campaign
+            campaign = None
+            for c in campaigns:
+                if sender_account.id in c.sender_account_ids and account.id in c.receiver_account_ids:
+                    campaign = c
+                    break
 
             # Use campaign language if available, default to "en"
             language = campaign.language if campaign else "en"
@@ -221,7 +244,38 @@ class ResponseBot:
                 language=language,  # type: ignore
             )
 
-            # Create reply message
+            # Create temporary message for message_id
+            temp_reply = EmailMessage(
+                sender=account.email,
+                receiver=sender_email,
+                subject=reply_content.subject if not original_subject.startswith("Re:") else original_subject,
+                body=reply_content.body,
+                in_reply_to=email_data.get("message_id"),
+                references=email_data.get("references") or email_data.get("message_id"),
+            )
+
+            # Create email record FIRST to get ID for tracking
+            email_record = Email(
+                sender_id=account.id,
+                receiver_id=sender_account.id,
+                subject=reply_content.subject,
+                body=reply_content.body,
+                message_id=temp_reply.message_id,
+                in_reply_to=email_data.get("message_id"),
+                thread_id=email_data.get("message_id"),
+                status=EmailStatus.PENDING,
+                is_warmup=True,
+                ai_generated=True,
+                ai_prompt=reply_content.prompt,
+                ai_model=reply_content.model,
+            )
+            self.session.add(email_record)
+            await self.session.flush()  # Get ID without committing
+
+            # Build tracking URL
+            tracking_url = f"{settings.api_base_url}/track/open/{email_record.id}"
+
+            # Create reply message with tracking pixel
             reply_message = EmailMessage(
                 sender=account.email,
                 receiver=sender_email,
@@ -229,6 +283,7 @@ class ResponseBot:
                 body=reply_content.body,
                 in_reply_to=email_data.get("message_id"),
                 references=email_data.get("references") or email_data.get("message_id"),
+                tracking_url=tracking_url,
             )
 
             # Send reply (decrypt password for SMTP)
@@ -242,23 +297,11 @@ class ResponseBot:
             )
 
             if success:
-                # Record in database
-                email_record = Email(
-                    sender_id=account.id,
-                    receiver_id=sender_account.id,
-                    subject=reply_content.subject,
-                    body=reply_content.body,
-                    message_id=reply_message.message_id,
-                    in_reply_to=email_data.get("message_id"),
-                    thread_id=email_data.get("message_id"),
-                    status=EmailStatus.SENT,
-                    is_warmup=True,
-                    ai_generated=True,
-                    ai_prompt=reply_content.prompt,
-                    ai_model=reply_content.model,
-                    sent_at=datetime.now(timezone.utc),
-                )
-                self.session.add(email_record)
+                # Update status to SENT
+                email_record.status = EmailStatus.SENT
+                email_record.sent_at = datetime.now(timezone.utc)
+
+                logger.debug(f"Reply {email_record.id} sent with tracking URL: {tracking_url}")
 
                 # Update original email status
                 result = await self.session.execute(

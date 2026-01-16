@@ -301,7 +301,7 @@ def process_campaign(campaign_id):
     try:
         response = requests.post(
             f"{API_BASE_URL}/api/campaigns/{campaign_id}/process",
-            timeout=300  # 5 minute timeout (email sending can take time with AI generation and SMTP)
+            timeout=60
         )
 
         # Check if request was successful (2xx status code)
@@ -783,7 +783,7 @@ elif page == "🎯 Campaigns":
             st.markdown("---")
 
             # Actions
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2 = st.columns(2)
 
             with col1:
                 if camp.get('status') == 'active':
@@ -802,21 +802,6 @@ elif page == "🎯 Campaigns":
                             st.rerun()
 
             with col2:
-                if st.button("🚀 Send Now", key=f"process_c_{camp['id']}"):
-                    with st.spinner("Processing..."):
-                        success, result = process_campaign(camp['id'])
-                        if success:
-                            st.success(f"Sent {result.get('emails_sent', 0)} emails")
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            # Check if it's a timeout message (not a real error)
-                            if isinstance(result, str) and ("taking longer than expected" in result.lower() or "background" in result.lower()):
-                                st.warning(result)
-                            else:
-                                st.error(f"Failed: {result}")
-
-            with col3:
                 if st.button("🗑️ Delete", key=f"delete_c_{camp['id']}", type="secondary"):
                     # Use a confirmation dialog
                     if 'confirm_delete_campaign' not in st.session_state:

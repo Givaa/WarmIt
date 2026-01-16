@@ -11,15 +11,29 @@ Complete documentation for WarmIt email warming platform.
 - [Security Setup Guide](SECURITY_SETUP.md) - Authentication & encryption setup
 - [Resource Estimation](RESOURCE_ESTIMATION.md) - Planning campaigns and infrastructure
 
+### Setup Guides
+- [API Keys Setup](setup/API_KEYS.md) - Configure AI providers (OpenRouter/Groq/OpenAI)
+- [Tracking Setup](setup/TRACKING_SETUP.md) - Email tracking pixel configuration
+
 ### Configuration
-- [Environment Variables](.env.example) - All configuration options
+- [Environment Variables](../.env.example) - All configuration options
 - [Configuration Profiles](../config/profiles/) - Small/Medium/Large/Enterprise presets
 - [Docker Compose](../docker/docker-compose.prod.yml) - Production deployment
 
-### Project Files
-- [Project Structure](../PROJECT_STRUCTURE.md) - Complete codebase map
-- [Changelog](../CHANGELOG.md) - All changes and versions
-- [TODO](../TODO.md) - Roadmap and future features
+### Developer Documentation
+- [Developer Guide](developer/README.md) - Complete developer reference
+- [Models Reference](developer/MODELS.md) - SQLAlchemy models documentation
+- [Services Reference](developer/SERVICES.md) - Business logic services
+- [API Reference](developer/API_REFERENCE.md) - REST API endpoints *(coming soon)*
+- [Task System](developer/TASK_SYSTEM.md) - Celery tasks *(coming soon)*
+
+### Project Documentation
+- [Project Structure](PROJECT_STRUCTURE.md) - Complete codebase map
+- [Changelog](changelog/CHANGELOG.md) - All changes and versions
+- [Changelog v0.2.2](changelog/CHANGELOG_v0.2.2.md) - Latest version changes
+- [TODO](TODO.md) - Roadmap and future features
+- [Implementation Notes](guides/IMPLEMENTATION_NOTES.md) - Technical implementation details
+- [Upgrade Guide v0.2.2](guides/UPGRADE_TO_v0.2.2.md) - Migration instructions
 - [Scripts Documentation](../scripts/README.md) - Utility scripts guide
 
 ---

@@ -26,6 +26,7 @@ class EmailMessage:
         message_id: Optional[str] = None,
         in_reply_to: Optional[str] = None,
         references: Optional[str] = None,
+        tracking_url: Optional[str] = None,
     ):
         self.sender = sender
         self.receiver = receiver
@@ -34,6 +35,7 @@ class EmailMessage:
         self.message_id = message_id or make_msgid()
         self.in_reply_to = in_reply_to
         self.references = references
+        self.tracking_url = tracking_url
 
     def to_mime(self) -> MIMEMultipart:
         """Convert to MIME message."""
@@ -55,7 +57,17 @@ class EmailMessage:
 
         # Add body as HTML (converts newlines to <br>)
         html_body = self.body.replace("\n", "<br>\n")
-        html_part = MIMEText(f"<html><body>{html_body}</body></html>", "html", "utf-8")
+
+        # Add tracking pixel if URL provided
+        tracking_pixel = ""
+        if self.tracking_url:
+            tracking_pixel = f'<img src="{self.tracking_url}" width="1" height="1" alt="" style="display:none" />'
+
+        html_part = MIMEText(
+            f'<html><body>{html_body}{tracking_pixel}</body></html>',
+            "html",
+            "utf-8"
+        )
         msg.attach(html_part)
 
         return msg
@@ -171,18 +183,23 @@ class EmailService:
             emails = []
             for msg_id in msg_ids:
                 try:
-                    # Fetch email
+                    # Fetch email with RFC822
+                    # Note: This WILL mark email as \Seen, but that's okay because
+                    # the response bot will re-mark as unread if it doesn't respond
                     fetch_response = await imap.fetch(msg_id.decode() if isinstance(msg_id, bytes) else msg_id, "(RFC822)")
 
-                    if fetch_response.lines:
-                        import email
-                        from email import policy
+                    # aioimaplib returns the email in lines attribute
+                    # The first line is the IMAP response header (e.g., "1 FETCH (RFC822 {1234}")
+                    # The subsequent lines contain the actual email data
+                    # The last line is ")"
+                    import email
+                    from email import policy
 
-                        # Parse raw email from response
-                        raw_email = b''
-                        for line in fetch_response.lines:
-                            if isinstance(line, bytes):
-                                raw_email += line
+                    if fetch_response.lines and len(fetch_response.lines) > 2:
+                        # Skip first line (IMAP header) and last line (")")
+                        # Join the middle lines which contain the email
+                        email_lines = fetch_response.lines[1:-1]
+                        raw_email = b''.join(email_lines)
 
                         if raw_email:
                             email_message = email.message_from_bytes(
@@ -199,6 +216,7 @@ class EmailService:
                                 "in_reply_to": email_message.get("In-Reply-To", "").strip("<>"),
                                 "references": email_message.get("References", ""),
                                 "body": EmailService._extract_body(email_message),
+                                "imap_id": msg_id.decode() if isinstance(msg_id, bytes) else msg_id,  # Add IMAP ID for later operations
                             }
 
                             emails.append(email_dict)
