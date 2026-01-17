@@ -86,6 +86,7 @@ show_help() {
     echo "  logs [service]  Show logs (api, worker, dashboard, postgres, redis)"
     echo "  db-shell        Open PostgreSQL interactive shell"
     echo "  health          Check API health status"
+    echo "  password        Get/generate admin password"
     echo "  help            Show this help menu"
     echo ""
     echo "Examples:"
@@ -148,6 +149,32 @@ if [ "$1" == "db-shell" ]; then
     echo "  \\q                     - Quit"
     echo ""
     docker exec -it warmit-postgres psql -U warmit -d warmit
+    exit 0
+fi
+
+if [ "$1" == "password" ]; then
+    echo -e "${BLUE}Getting admin password...${NC}"
+    echo ""
+    # Check if dashboard container is running
+    if ! docker ps --format '{{.Names}}' | grep -q warmit-dashboard; then
+        echo -e "${RED}❌ Dashboard container is not running${NC}"
+        echo "Start WarmIt first: ./warmit.sh start"
+        exit 1
+    fi
+    # Generate/get password
+    docker exec warmit-dashboard python3 -c "
+import sys
+sys.path.insert(0, '/app')
+from dashboard.auth import get_or_create_password
+hash, is_new = get_or_create_password()
+if not is_new:
+    print()
+    print('=' * 60)
+    print('Password already set. To reset:')
+    print('  1. docker exec warmit-dashboard rm /app/dashboard/.auth')
+    print('  2. ./warmit.sh password')
+    print('=' * 60)
+"
     exit 0
 fi
 
