@@ -1,13 +1,21 @@
-"""Email tracking endpoints for opens and clicks."""
+"""Email tracking endpoints for opens and clicks.
+
+Secured with HMAC tokens to prevent unauthorized access.
+
+Developed with ❤️ by Givaa
+https://github.com/Givaa
+"""
 
 import logging
 from datetime import datetime, timezone
-from fastapi import APIRouter, Response, HTTPException
+from typing import Optional
+from fastapi import APIRouter, Response, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends
 from warmit.database import get_session
 from warmit.models.email import Email, EmailStatus
+from warmit.services.tracking_token import validate_tracking_token, is_token_required
 
 
 logger = logging.getLogger(__name__)
@@ -24,6 +32,8 @@ TRACKING_PIXEL = bytes.fromhex(
 @router.get("/track/open/{email_id}")
 async def track_email_open(
     email_id: int,
+    token: Optional[str] = Query(None, description="HMAC security token"),
+    ts: Optional[int] = Query(None, description="Token timestamp"),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -31,7 +41,37 @@ async def track_email_open(
 
     When email client loads the tracking pixel, we record the open.
     Returns a 1x1 transparent GIF.
+
+    Security: When TRACKING_SECRET_KEY is set, requires valid HMAC token.
     """
+    # Validate token if security is enabled
+    if is_token_required():
+        if not token or ts is None:
+            logger.warning(f"Tracking attempt without token for email {email_id}")
+            # Still return pixel to not break email display, but don't track
+            return Response(
+                content=TRACKING_PIXEL,
+                media_type="image/gif",
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                }
+            )
+
+        if not validate_tracking_token(email_id, token, ts):
+            logger.warning(f"Invalid tracking token for email {email_id}")
+            # Still return pixel to not break email display, but don't track
+            return Response(
+                content=TRACKING_PIXEL,
+                media_type="image/gif",
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                }
+            )
+
     try:
         # Find the email with eager loading of relationships
         from sqlalchemy.orm import selectinload

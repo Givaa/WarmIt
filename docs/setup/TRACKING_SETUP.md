@@ -2,170 +2,181 @@
 
 ## Overview
 
-WarmIt includes email open tracking using invisible tracking pixels. For this to work in production, your API must be **publicly accessible** from the internet.
+WarmIt includes email open tracking using invisible tracking pixels. The system is secured with:
+
+1. **Nginx Reverse Proxy**: Only exposes `/track/*` endpoints, blocks all API access
+2. **HMAC Token Signatures**: Cryptographically signed tracking URLs prevent unauthorized access
+
+---
+
+## 🔒 Security Architecture
+
+```
+Internet
+    │
+    ▼
+┌─────────────────────────────────────┐
+│        Nginx (port 80/443)          │
+├─────────────────────────────────────┤
+│ /              → Dashboard (8501)   │  ← Protected by login
+│ /track/*       → API (8000)         │  ← Requires valid HMAC token
+│ /api/*         → BLOCKED            │  ← Not accessible
+│ /docs          → BLOCKED            │  ← Not accessible
+└─────────────────────────────────────┘
+```
+
+**Tracking URLs are secured with HMAC-SHA256 tokens:**
+```
+/track/open/123?token=a1b2c3d4e5f6...&ts=1705484400
+```
+
+- Token is generated using `TRACKING_SECRET_KEY`
+- Tokens expire after 30 days
+- Invalid/missing tokens are rejected (pixel returned but no tracking)
 
 ---
 
 ## 🔧 Configuration
 
-### 1. Set API_BASE_URL
-
-Edit your `docker/.env` file:
+### 1. Generate Security Keys
 
 ```bash
-# ❌ WRONG for production (localhost is not accessible from internet)
-API_BASE_URL=http://localhost:8000
+# Generate TRACKING_SECRET_KEY (required for secure tracking)
+python -c "import secrets; print(secrets.token_hex(32))"
 
-# ✅ CORRECT for production (use your server's public IP or domain)
-API_BASE_URL=http://123.45.67.89:8000
+# Example output: a3f8c2e1d9b7f6a5c4e3d2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1
+```
 
-# ✅ BEST for production (use HTTPS with domain)
+### 2. Edit docker/.env
+
+```bash
+# Required: Secret key for HMAC token signatures
+TRACKING_SECRET_KEY=a3f8c2e1d9b7f6a5c4e3d2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1
+
+# Public URL where emails can reach tracking pixels
+# This goes through Nginx (port 80), NOT directly to API (port 8000)
+API_BASE_URL=http://YOUR_SERVER_IP
+
+# Or with HTTPS (recommended)
 API_BASE_URL=https://warmit.yourdomain.com
 ```
 
-### 2. Open Firewall Port
+### 3. Open Firewall Port
 
-Your server must allow incoming connections on port 8000 (or your configured port):
+Only port 80 (or 443 for HTTPS) needs to be open:
 
 ```bash
 # Ubuntu/Debian with UFW
-sudo ufw allow 8000/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp  # If using HTTPS
 
 # CentOS/RHEL with firewalld
-sudo firewall-cmd --permanent --add-port=8000/tcp
+sudo firewall-cmd --permanent --add-port=80/tcp
+sudo firewall-cmd --permanent --add-port=443/tcp
 sudo firewall-cmd --reload
-
-# Check if port is open
-sudo netstat -tulpn | grep :8000
 ```
 
-### 3. Verify Public Accessibility
+**Note**: Port 8000 should NOT be exposed publicly - Nginx handles all traffic.
 
-Test from an external machine (not your server):
+### 4. Start Services
 
 ```bash
-# Replace with your server's IP/domain
-curl http://YOUR_SERVER_IP:8000/health
-
-# Should return: {"status":"healthy"}
+./warmit.sh restart
 ```
 
 ---
 
-## 🔒 Production Best Practices
+## 🔐 HTTPS Setup (Recommended)
 
-### Option 1: Direct Port Access (Quick Setup)
+### Option 1: External Reverse Proxy
 
-**Pros**: Quick and easy
-**Cons**: Exposes port 8000 directly, no HTTPS
+If you have an existing Nginx/Caddy setup:
 
+1. Proxy port 80/443 to the WarmIt Nginx container (port 80)
+2. Handle SSL termination at your external proxy
+
+### Option 2: Built-in HTTPS
+
+1. Create SSL certificates directory:
 ```bash
-API_BASE_URL=http://YOUR_SERVER_IP:8000
+mkdir -p docker/ssl
 ```
 
-### Option 2: Reverse Proxy with HTTPS (Recommended)
-
-**Pros**: HTTPS encryption, better security, standard ports (80/443)
-**Cons**: Requires domain name and SSL certificate
-
-#### Using Nginx
-
-1. Install Nginx and Certbot:
+2. Copy certificates:
 ```bash
-sudo apt update
-sudo apt install nginx certbot python3-certbot-nginx
+cp /path/to/fullchain.pem docker/ssl/
+cp /path/to/privkey.pem docker/ssl/
 ```
 
-2. Create Nginx config `/etc/nginx/sites-available/warmit`:
+3. Update `docker/nginx.conf` to enable HTTPS:
 ```nginx
 server {
-    listen 80;
+    listen 443 ssl;
     server_name warmit.yourdomain.com;
 
-    location / {
-        proxy_pass http://localhost:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
+    ssl_certificate /etc/nginx/ssl/fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+
+    # ... rest of config
 }
 ```
 
-3. Enable site and get SSL:
-```bash
-sudo ln -s /etc/nginx/sites-available/warmit /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
-sudo certbot --nginx -d warmit.yourdomain.com
-```
-
-4. Update .env:
-```bash
-API_BASE_URL=https://warmit.yourdomain.com
-```
-
-#### Using Caddy (Simpler Alternative)
-
-1. Install Caddy:
-```bash
-sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-sudo apt update
-sudo apt install caddy
-```
-
-2. Create Caddyfile:
-```
-warmit.yourdomain.com {
-    reverse_proxy localhost:8000
-}
-```
-
-3. Start Caddy (automatically gets SSL):
-```bash
-sudo caddy run --config Caddyfile
-```
-
-4. Update .env:
-```bash
-API_BASE_URL=https://warmit.yourdomain.com
+4. Uncomment in `docker-compose.prod.yml`:
+```yaml
+nginx:
+  ports:
+    - "80:80"
+    - "443:443"  # Uncomment this
+  volumes:
+    - ./ssl:/etc/nginx/ssl:ro  # Uncomment this
 ```
 
 ---
 
-## 🧪 Testing Tracking
+## 🧪 Testing
 
-### 1. Check Tracking Endpoint
+### 1. Verify Security (API Blocked)
 
 ```bash
-# Should return a 1x1 transparent GIF
-curl -I http://YOUR_API_URL/track/open/1
+# These should return 403 Forbidden
+curl http://YOUR_SERVER/api/accounts
+curl http://YOUR_SERVER/docs
+curl http://YOUR_SERVER/health
 
-# Expected response:
-# HTTP/1.1 200 OK
-# content-type: image/gif
+# Example response: "Forbidden - API access not allowed"
 ```
 
-### 2. Send Test Email
-
-1. Go to dashboard: http://YOUR_SERVER:8501
-2. Create a campaign with 1 sender and 1 receiver
-3. Click "Send Now"
-4. Check the receiver's email inbox
-5. Open the email
-6. Wait 10-20 seconds
-7. Refresh dashboard - you should see "Opens: 1"
-
-### 3. Check Logs
+### 2. Verify Tracking (Token Required)
 
 ```bash
-# Check if tracking requests are coming in
-docker compose -f docker/docker-compose.prod.yml logs api | grep track/open
+# Without token - returns pixel but doesn't track (warning logged)
+curl -I http://YOUR_SERVER/track/open/1
 
-# You should see entries like:
-# INFO:     123.45.67.89:12345 - "GET /track/open/123 HTTP/1.1" 200 OK
+# Returns: HTTP/1.1 403 Forbidden (blocked by Nginx)
+
+# With valid token - tracks and returns pixel
+# (You need a real token from an email)
+curl -I "http://YOUR_SERVER/track/open/1?token=VALID_TOKEN&ts=1705484400"
+
+# Returns: HTTP/1.1 200 OK, content-type: image/gif
+```
+
+### 3. Send Test Email
+
+1. Go to dashboard: http://YOUR_SERVER
+2. Navigate to "🧪 Quick Test" page
+3. Send a test email with a sender and receiver
+4. Open the email in the receiver's inbox
+5. Check dashboard - you should see the open tracked
+
+### 4. Check Logs
+
+```bash
+# Check tracking requests
+docker compose -f docker/docker-compose.prod.yml logs nginx | grep track
+
+# Check for invalid token attempts
+docker compose -f docker/docker-compose.prod.yml logs api | grep "Invalid tracking token"
 ```
 
 ---
@@ -174,45 +185,43 @@ docker compose -f docker/docker-compose.prod.yml logs api | grep track/open
 
 ### Problem: Opens Not Tracking
 
-**Check 1**: Verify API_BASE_URL is publicly accessible
+**Check 1**: Verify TRACKING_SECRET_KEY is set
 ```bash
-# From OUTSIDE your server
-curl http://YOUR_API_URL/health
+# Should show your key
+grep TRACKING_SECRET_KEY docker/.env
 ```
 
-**Check 2**: Check email HTML source
-- Open the email in your email client
-- View source (usually right-click → View Source)
+**Check 2**: Verify API_BASE_URL is correct
+```bash
+# Should NOT include port 8000 (Nginx handles routing)
+grep API_BASE_URL docker/.env
+
+# WRONG: API_BASE_URL=http://server:8000
+# RIGHT: API_BASE_URL=http://server
+```
+
+**Check 3**: Check email HTML source
+- Open the email → View Source
 - Search for `<img src=`
-- Verify the URL matches your API_BASE_URL
+- Verify URL has `?token=...&ts=...` parameters
 
-**Check 3**: Email client blocks images
-- Some email clients block images by default (Gmail "Display images below")
-- Click "Display images" to load tracking pixel
-
-**Check 4**: Check firewall
+**Check 4**: Check Nginx logs
 ```bash
-# Test if port is reachable
-telnet YOUR_SERVER_IP 8000
-
-# If it times out, firewall is blocking it
+docker compose -f docker/docker-compose.prod.yml logs nginx
 ```
 
-### Problem: API Not Accessible
+### Problem: 403 on Tracking URLs
 
-**Solution 1**: Check Docker port binding
+**Cause**: Nginx blocks requests without token parameter
+
+**Solution**: This is expected! Emails must include `?token=...&ts=...` parameters. Old emails without tokens won't track.
+
+### Problem: Dashboard Not Loading
+
+**Check**: Nginx is running
 ```bash
-# Verify container is listening
-docker compose -f docker/docker-compose.prod.yml ps
-
-# Should show: 0.0.0.0:8000->8000/tcp
+docker compose -f docker/docker-compose.prod.yml ps nginx
 ```
-
-**Solution 2**: Check cloud provider security groups
-- AWS: EC2 → Security Groups → Inbound Rules
-- GCP: VPC Network → Firewall Rules
-- Azure: Network Security Groups
-- Add rule: TCP port 8000 from 0.0.0.0/0
 
 ---
 
@@ -220,70 +229,58 @@ docker compose -f docker/docker-compose.prod.yml ps
 
 ### What Gets Tracked
 
-1. **Opens**: When recipient's email client loads the tracking pixel
-   - Recorded in: `Email.opened_at`
-   - Counted in: `Account.total_opened`
+| Event | How Tracked | Recorded In |
+|-------|-------------|-------------|
+| **Opens** | Tracking pixel loaded | `Email.opened_at` |
+| **Bounces** | IMAP inbox monitoring | `Email.bounced_at` |
+| **Replies** | IMAP inbox monitoring | `Email.replied_at` |
 
-2. **Bounces**: When email delivery fails
-   - Detected automatically by checking sender inbox for bounce notifications
-   - Recorded in: `Email.bounced_at`, `Email.status = BOUNCED`
-   - Counted in: `Account.total_bounced`
+### Security Features
 
-3. **Replies**: When receiver responds to email
-   - Detected by response bot checking receiver inbox
-   - Recorded in: `Email.replied_at`, `Email.status = REPLIED`
-   - Counted in: `Account.total_replied`
+| Feature | Description |
+|---------|-------------|
+| **Token Signing** | HMAC-SHA256 prevents forgery |
+| **Token Expiry** | 30 days (matches campaign duration) |
+| **Nginx Blocking** | Only `/track/*` exposed |
+| **First-Open Only** | Multiple opens don't inflate stats |
 
 ### Tracking Limitations
 
-1. **Opens**:
-   - Only tracked when email client loads images
-   - Blocked by "Disable remote images" setting
-   - May be double-counted if email opened multiple times
-   - First open only is recorded
-
-2. **Bounces**:
-   - Detected via inbox monitoring (checks every 30 minutes)
-   - Not instant - may take up to 30 minutes to detect
-   - Some bounce notifications may not match standard patterns
-
-3. **Privacy**:
-   - Tracking pixels are standard in email marketing
-   - Fully GDPR compliant (no personal data collected)
-   - Only tracks: email ID, timestamp
+1. **Opens**: Only tracked if email client loads images
+2. **Token Required**: Old emails without tokens won't track
+3. **30-Day Expiry**: Tokens expire after 30 days
 
 ---
 
-## 🔐 Security Considerations
+## 🛡️ Security Best Practices
 
-1. **Rate Limiting**: Consider adding rate limits to tracking endpoint to prevent abuse
-2. **HTTPS**: Always use HTTPS in production to prevent MITM attacks
-3. **IP Whitelisting**: If possible, restrict tracking endpoint to known email providers
-4. **Monitoring**: Monitor tracking endpoint for unusual traffic patterns
+1. **Keep TRACKING_SECRET_KEY secret**: Never commit to git
+2. **Use HTTPS in production**: Prevents token interception
+3. **Monitor logs**: Watch for unusual tracking patterns
+4. **Rotate keys periodically**: Generate new key every few months
 
 ---
 
 ## 📝 Summary
 
-✅ **Required for tracking to work**:
-- API_BASE_URL must be publicly accessible (not localhost)
-- Port 8000 (or your port) must be open in firewall
-- Recipients' email clients must load images
-
-✅ **Recommended for production**:
-- Use HTTPS with reverse proxy (Nginx/Caddy)
-- Use a domain name instead of IP address
-- Monitor tracking endpoint logs
+| Setting | Value |
+|---------|-------|
+| **Public Port** | 80 (via Nginx) |
+| **Internal API** | 8000 (not exposed) |
+| **Internal Dashboard** | 8501 (not exposed) |
+| **TRACKING_SECRET_KEY** | Required for secure tracking |
+| **API_BASE_URL** | Public URL (no port 8000) |
 
 ✅ **After setup**:
-- Restart services: `./warmit.sh restart`
-- Send test email and verify tracking
-- Check logs for tracking requests
+1. Restart services: `./warmit.sh restart`
+2. Verify API is blocked: `curl http://SERVER/api/accounts` → 403
+3. Send test email and verify tracking works
+4. Check logs for any issues
 
 ---
 
 Need help? Check the logs:
 ```bash
+./warmit.sh logs nginx
 ./warmit.sh logs api
-./warmit.sh logs worker
 ```

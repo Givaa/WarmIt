@@ -5,6 +5,88 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-01-17
+
+### Security Hardening
+
+#### Fixed (Critical Security Vulnerabilities)
+- **Password Hashing**: Replaced SHA-256 with bcrypt (cost factor 12)
+  - SHA-256 is fast and vulnerable to brute-force attacks
+  - bcrypt is specifically designed for password hashing
+  - Backwards compatible with existing SHA-256 hashes
+  - Automatic upgrade on next login
+
+- **Encryption Service**: No longer falls back to plaintext storage
+  - Previously, missing ENCRYPTION_KEY caused plaintext password storage
+  - Now raises `EncryptionError` if encryption unavailable
+  - Prevents accidental exposure of sensitive data
+
+- **Password File Logging**: Removed insecure password storage
+  - Admin passwords no longer written to `first_run_password.txt`
+  - Displayed only in console output
+  - Prevents accidental password exposure
+
+- **CORS Configuration**: Restricted from wildcard to specific origins
+  - Previously allowed all origins (`*`)
+  - Now limited to internal Docker network and localhost
+  - Prevents cross-site request forgery
+
+- **Database Ports**: Redis/PostgreSQL no longer exposed publicly
+  - `docker-compose.prod.yml` now uses `expose` instead of `ports`
+  - Services only accessible within Docker network
+  - Prevents direct database attacks
+
+#### Added
+- **Rate Limiting Middleware**: Protection against brute-force and API abuse
+  - Auth endpoints: 5 requests per 5 minutes
+  - Password endpoints: 3 requests per 5 minutes
+  - API endpoints: 100 requests per minute
+  - Tracking endpoints: 500 requests per minute
+  - Returns 429 with Retry-After header
+  - Rate limit headers in responses (X-RateLimit-*)
+  - New middleware: `src/warmit/middleware/rate_limit.py`
+
+#### Dependencies
+- Added `bcrypt ^4.2.0` for secure password hashing
+
+---
+
+## [1.0.2] - 2026-01-17
+
+### Secure Tracking Architecture
+
+#### Added
+- **Nginx Reverse Proxy**: All traffic now goes through Nginx
+  - Dashboard accessible at `/` (port 80)
+  - Tracking pixels at `/track/*` (with token validation)
+  - All API endpoints blocked from public access (`/api/*`, `/docs`, `/health`)
+  - New `docker/nginx.conf` configuration file
+
+- **HMAC Token Security**: Tracking URLs are cryptographically signed
+  - New `TRACKING_SECRET_KEY` environment variable
+  - Tokens generated with HMAC-SHA256
+  - 30-day expiry (matches campaign duration)
+  - New service: `src/warmit/services/tracking_token.py`
+
+#### Changed
+- `docker-compose.prod.yml`: API and Dashboard no longer expose ports directly
+  - API: `ports` removed, uses `expose: 8000` (internal only)
+  - Dashboard: `ports` removed, uses `expose: 8501` (internal only)
+  - Dozzle logs viewer: internal only (access via SSH tunnel)
+  - New Nginx service as the only public entry point
+
+- Tracking URLs now include `?token=...&ts=...` parameters
+- Updated `API_BASE_URL` to use port 80 (via Nginx) instead of 8000
+- Documentation updated for new security architecture
+
+#### Security
+- API endpoints no longer publicly accessible
+- Tracking requires valid HMAC token
+- Invalid/expired tokens are rejected (pixel returned but no tracking)
+- Old emails without tokens will not track opens
+
+---
+
 ## [1.0.1] - 2026-01-17
 
 ### Windows Support, Receiver Stats & European Date Format

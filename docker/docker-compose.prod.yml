@@ -1,11 +1,13 @@
 services:
   # Redis with persistence and health checks
+  # NOTE: Redis is NOT exposed publicly - accessed only internally by API/Worker
   redis:
     image: redis:7-alpine
     container_name: warmit-redis
     command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
-    ports:
-      - "6379:6379"
+    # ports: REMOVED for security - Redis accessible only internally
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     restart: always
@@ -22,6 +24,7 @@ services:
         max-file: "3"
 
   # PostgreSQL with health checks
+  # NOTE: PostgreSQL is NOT exposed publicly - accessed only internally by API/Worker
   postgres:
     image: postgres:16-alpine
     container_name: warmit-postgres
@@ -30,8 +33,9 @@ services:
       POSTGRES_USER: warmit
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-warmit_password}
       POSTGRES_INITDB_ARGS: "-E UTF8"
-    ports:
-      - "5432:5432"
+    # ports: REMOVED for security - PostgreSQL accessible only internally
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: always
@@ -48,14 +52,16 @@ services:
         max-file: "3"
 
   # WarmIt API with auto-restart
+  # NOTE: API is NOT exposed publicly - accessed only via Nginx reverse proxy
   api:
     build:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: warmit-api
     command: uvicorn warmit.main:app --host 0.0.0.0 --port 8000 --workers 2 --timeout-keep-alive 300
-    ports:
-      - "8000:8000"
+    # ports: REMOVED for security - API accessible only internally via Nginx
+    expose:
+      - "8000"
     environment:
       TZ: Europe/Rome
       DATABASE_URL: postgresql+asyncpg://warmit:${POSTGRES_PASSWORD:-warmit_password}@postgres/warmit
@@ -177,14 +183,16 @@ services:
           memory: 512M
 
   # Streamlit Dashboard
+  # NOTE: Dashboard is NOT exposed directly - accessed via Nginx reverse proxy
   dashboard:
     build:
       context: ..
       dockerfile: docker/Dockerfile.dashboard
     container_name: warmit-dashboard
     command: streamlit run dashboard/app.py --server.port=8501 --server.address=0.0.0.0
-    ports:
-      - "8501:8501"
+    # ports: REMOVED for security - Dashboard accessible only via Nginx
+    expose:
+      - "8501"
     environment:
       TZ: Europe/Rome
       API_BASE_URL: http://api:8000
@@ -241,11 +249,13 @@ services:
         max-file: "3"
 
   # Dozzle - Web-based log viewer
+  # NOTE: Keep internal for security - access via SSH tunnel or VPN
   logs:
     image: amir20/dozzle:latest
     container_name: warmit-logs
-    ports:
-      - "8888:8080"
+    # ports: REMOVED for security - access via localhost only
+    expose:
+      - "8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
@@ -265,12 +275,50 @@ services:
           cpus: '0.5'
           memory: 256M
 
+  # Nginx Reverse Proxy - ONLY public entry point
+  # Exposes: Dashboard (/) and Tracking pixels (/track/*)
+  # Blocks: All API endpoints (/api/*, /docs, /health, etc.)
+  nginx:
+    image: nginx:alpine
+    container_name: warmit-nginx
+    ports:
+      - "80:80"
+      # - "443:443"  # Uncomment for HTTPS
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # - ./ssl:/etc/nginx/ssl:ro  # Uncomment for HTTPS certificates
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      api:
+        condition: service_healthy
+      dashboard:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+
 volumes:
   redis_data:
     driver: local
   postgres_data:
     driver: local
   beat_schedule:
+    driver: local
+  nginx_logs:
     driver: local
 
 networks:

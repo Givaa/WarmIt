@@ -11,6 +11,7 @@ from warmit.models.email import Email, EmailStatus
 from warmit.models.campaign import Campaign
 from warmit.services.email_service import EmailService, EmailMessage
 from warmit.services.ai_generator import AIGenerator
+from warmit.services.tracking_token import generate_tracking_url
 from warmit.config import settings
 
 
@@ -272,8 +273,8 @@ class ResponseBot:
             self.session.add(email_record)
             await self.session.flush()  # Get ID without committing
 
-            # Build tracking URL
-            tracking_url = f"{settings.api_base_url}/track/open/{email_record.id}"
+            # Build tracking URL with signed token
+            tracking_url = generate_tracking_url(settings.api_base_url, email_record.id)
 
             # Create reply message with tracking pixel
             reply_message = EmailMessage(

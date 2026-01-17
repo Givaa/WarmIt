@@ -1,6 +1,14 @@
-"""Authentication module for WarmIt Dashboard."""
+"""Authentication module for WarmIt Dashboard.
 
-import hashlib
+Security improvements:
+- bcrypt for password hashing (not SHA256)
+- Secure session storage
+- No plaintext password logging
+
+Developed with ❤️ by Givaa
+https://github.com/Givaa
+"""
+
 import secrets
 import os
 from pathlib import Path
@@ -8,6 +16,15 @@ from typing import Optional, Tuple
 import logging
 import json
 from datetime import datetime, timedelta
+
+# Use bcrypt for secure password hashing
+try:
+    import bcrypt
+    BCRYPT_AVAILABLE = True
+except ImportError:
+    import hashlib
+    BCRYPT_AVAILABLE = False
+    logging.warning("bcrypt not installed. Using SHA256 fallback (less secure).")
 
 logger = logging.getLogger(__name__)
 
@@ -36,22 +53,23 @@ def generate_password(length: int = 16) -> str:
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using SHA-256 with salt.
+    """Hash a password using bcrypt (secure) or SHA-256 fallback.
 
     Args:
         password: Plain text password
 
     Returns:
-        Hashed password in format: salt$hash
+        Hashed password (bcrypt format or salt$hash for fallback)
     """
-    # Generate random salt (32 bytes = 64 hex chars)
-    salt = secrets.token_hex(32)
-
-    # Hash password with salt
-    pwd_hash = hashlib.sha256((salt + password).encode()).hexdigest()
-
-    # Return in format: salt$hash
-    return f"{salt}${pwd_hash}"
+    if BCRYPT_AVAILABLE:
+        # bcrypt with cost factor 12 (secure, ~250ms per hash)
+        return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
+    else:
+        # Fallback: SHA-256 with salt (less secure but functional)
+        import hashlib
+        salt = secrets.token_hex(32)
+        pwd_hash = hashlib.sha256((salt + password).encode()).hexdigest()
+        return f"sha256${salt}${pwd_hash}"
 
 
 def verify_password(password: str, hashed: str) -> bool:
@@ -59,16 +77,37 @@ def verify_password(password: str, hashed: str) -> bool:
 
     Args:
         password: Plain text password to verify
-        hashed: Hashed password in format: salt$hash
+        hashed: Hashed password (bcrypt or sha256$salt$hash format)
 
     Returns:
         True if password matches, False otherwise
     """
     try:
-        salt, pwd_hash = hashed.split('$')
-        # Hash the provided password with the same salt
-        new_hash = hashlib.sha256((salt + password).encode()).hexdigest()
-        return new_hash == pwd_hash
+        # Check if it's bcrypt hash (starts with $2b$)
+        if hashed.startswith('$2b$') or hashed.startswith('$2a$'):
+            if BCRYPT_AVAILABLE:
+                return bcrypt.checkpw(password.encode(), hashed.encode())
+            else:
+                logger.error("bcrypt hash found but bcrypt not installed")
+                return False
+
+        # Legacy SHA-256 format: sha256$salt$hash or old salt$hash
+        if hashed.startswith('sha256$'):
+            import hashlib
+            parts = hashed.split('$')
+            if len(parts) == 3:
+                _, salt, pwd_hash = parts
+                new_hash = hashlib.sha256((salt + password).encode()).hexdigest()
+                return secrets.compare_digest(new_hash, pwd_hash)
+
+        # Old legacy format: salt$hash (no prefix)
+        if '$' in hashed and not hashed.startswith('$'):
+            import hashlib
+            salt, pwd_hash = hashed.split('$', 1)
+            new_hash = hashlib.sha256((salt + password).encode()).hexdigest()
+            return secrets.compare_digest(new_hash, pwd_hash)
+
+        return False
     except Exception as e:
         logger.error(f"Error verifying password: {e}")
         return False
@@ -107,27 +146,18 @@ def get_or_create_password() -> Tuple[str, bool]:
         # Set secure permissions (owner read/write only)
         AUTH_FILE.chmod(0o600)
 
-        logger.info("=" * 80)
-        logger.info("⚠️  ADMIN PASSWORD GENERATED - SAVE THIS PASSWORD!")
-        logger.info("=" * 80)
-        logger.info(f"🔑 Admin Password: {password}")
-        logger.info("=" * 80)
-        logger.info("⚠️  This password will only be shown ONCE at first startup!")
-        logger.info("⚠️  Save it somewhere safe!")
-        logger.info("=" * 80)
+        # SECURITY: Show password only in console, NEVER write to file
+        # Password is displayed once at startup - user must save it
+        print("\n" + "=" * 70)
+        print("🔐 WARMIT ADMIN PASSWORD GENERATED")
+        print("=" * 70)
+        print(f"   Password: {password}")
+        print("=" * 70)
+        print("⚠️  SAVE THIS PASSWORD NOW - IT WILL NOT BE SHOWN AGAIN!")
+        print("⚠️  If lost, delete dashboard/.auth and restart to generate new one.")
+        print("=" * 70 + "\n")
 
-        # Also log to a file for safety
-        log_file = Path(__file__).parent / "first_run_password.txt"
-        with open(log_file, 'w') as f:
-            f.write(f"WarmIt Admin Password (Generated at startup)\n")
-            f.write(f"=" * 60 + "\n")
-            f.write(f"Password: {password}\n")
-            f.write(f"=" * 60 + "\n")
-            f.write(f"This file will be automatically deleted after first successful login.\n")
-        log_file.chmod(0o600)
-
-        logger.info(f"💾 Password also saved temporarily to a secure file")
-        logger.info("   (This file will be deleted after first successful login)")
+        logger.info("🔐 New admin password generated (shown in console output only)")
 
         return password_hash, True
 
@@ -174,15 +204,7 @@ def change_password(old_password: str, new_password: str) -> Tuple[bool, str]:
         return False, f"Error: {str(e)}"
 
 
-def delete_first_run_file():
-    """Delete the temporary password file after first login."""
-    log_file = Path(__file__).parent / "first_run_password.txt"
-    if log_file.exists():
-        try:
-            log_file.unlink()
-            logger.info("🗑️  Deleted temporary password file")
-        except Exception as e:
-            logger.error(f"Error deleting temporary password file: {e}")
+# REMOVED: delete_first_run_file() - no longer write passwords to files
 
 
 def check_auth(password: str) -> bool:
@@ -195,14 +217,7 @@ def check_auth(password: str) -> bool:
         True if password is correct, False otherwise
     """
     password_hash, is_new = get_or_create_password()
-
-    result = verify_password(password, password_hash)
-
-    # Delete temp password file on first successful login
-    if result:
-        delete_first_run_file()
-
-    return result
+    return verify_password(password, password_hash)
 
 
 def create_session_token() -> str:

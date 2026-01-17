@@ -38,15 +38,16 @@ docker logs warmit-dashboard
 
 Look for:
 ```
-=" * 80
-🔑 Admin Password: xY9#Kp2@mN4$qR8&
-=" * 80
+======================================================================
+🔐 WARMIT ADMIN PASSWORD GENERATED
+======================================================================
+   Password: xY9#Kp2@mN4$qR8&
+======================================================================
+⚠️  SAVE THIS PASSWORD NOW - IT WILL NOT BE SHOWN AGAIN!
+======================================================================
 ```
 
-**Or** check temporary file:
-```bash
-cat dashboard/first_run_password.txt
-```
+**Important:** The password is shown ONLY ONCE at first startup. Save it immediately!
 
 ### 5. Login
 
@@ -236,9 +237,8 @@ echo "ENCRYPTION_KEY=<key_here>" >> docker/.env
 ```bash
 ./warmit.sh stop
 rm dashboard/.auth
-rm dashboard/first_run_password.txt  # if exists
 ./warmit.sh start
-docker logs warmit-dashboard | grep "Admin Password"
+docker logs warmit-dashboard  # Look for password in output
 ```
 
 ### Migration fails with "already encrypted"

@@ -12,6 +12,7 @@ from warmit.api import accounts, campaigns, metrics, test, tracking
 from warmit.database import init_db, get_session
 from warmit.config import settings
 from warmit.services.health_monitor import HealthMonitor
+from warmit.middleware.rate_limit import RateLimitMiddleware
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,13 +49,29 @@ app = FastAPI(
 )
 
 # Add CORS middleware
+# SECURITY: Only allow requests from the dashboard (same origin via Nginx)
+# In production, Nginx handles all external requests and proxies internally
+# This restricts direct API access to internal Docker network only
+CORS_ORIGINS = [
+    "http://localhost",
+    "http://localhost:80",
+    "http://localhost:8501",  # Dashboard dev
+    "http://dashboard:8501",  # Docker internal
+    "http://nginx",           # Docker internal via Nginx
+    "http://nginx:80",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["*"],
 )
+
+# Add rate limiting middleware
+# SECURITY: Protects against brute-force and API abuse
+app.add_middleware(RateLimitMiddleware)
 
 # Include routers
 app.include_router(accounts.router, prefix="/api/accounts", tags=["accounts"])
