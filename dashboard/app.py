@@ -133,7 +133,7 @@ if not st.session_state.authenticated:
                 placeholder="Enter your admin password"
             )
 
-            submit = st.form_submit_button("🔓 Login", width="full", type="primary")
+            submit = st.form_submit_button("🔓 Login", use_container_width=True, type="primary")
 
             if submit:
                 if password_input:
@@ -611,7 +611,7 @@ if page == "📊 Dashboard":
             xaxis=dict(tickformat="%d/%m/%Y")  # European date format
         )
 
-        st.plotly_chart(fig, width="full")
+        st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No data available yet")
 
@@ -630,7 +630,7 @@ elif page == "📧 Accounts":
     with col3:
         st.write("")
         st.write("")
-        if st.button("🔄 Refresh", width="full"):
+        if st.button("🔄 Refresh", use_container_width=True):
             st.rerun()
 
     # Filter accounts
@@ -727,7 +727,7 @@ elif page == "🎯 Campaigns":
     with col2:
         st.write("")
         st.write("")
-        if st.button("🔄 Refresh", width="full"):
+        if st.button("🔄 Refresh", use_container_width=True):
             st.rerun()
 
     # Filter campaigns
@@ -820,7 +820,7 @@ elif page == "🎯 Campaigns":
                 # Format the dataframe
                 st.dataframe(
                     df_display,
-                    width="full",
+                    use_container_width=True,
                     hide_index=True
                 )
 
@@ -906,7 +906,7 @@ elif page == "🎯 Campaigns":
                 # Format the dataframe
                 st.dataframe(
                     df_recv_display,
-                    width="full",
+                    use_container_width=True,
                     hide_index=True
                 )
 
@@ -1024,7 +1024,7 @@ elif page == "📈 Analytics":
             }
         )
         fig.update_layout(xaxis=dict(tickformat="%d/%m/%Y"))  # European date format
-        st.plotly_chart(fig, width="full")
+        st.plotly_chart(fig, use_container_width=True)
 
         # Rates
         st.subheader("📈 Performance Rates")
@@ -1041,7 +1041,7 @@ elif page == "📈 Analytics":
             hovermode='x unified',
             xaxis=dict(tickformat="%d/%m/%Y")  # European date format
         )
-        st.plotly_chart(fig, width="full")
+        st.plotly_chart(fig, use_container_width=True)
 
         # Summary stats
         st.subheader("📊 Summary Statistics")
@@ -1135,7 +1135,7 @@ elif page == "➕ Add New":
             if config.get("notes"):
                 st.info(f"ℹ️ **{config.get('name', 'Provider')} Note:** {config['notes']}")
 
-            submit = st.form_submit_button("➕ Add Account", width="full", type="primary")
+            submit = st.form_submit_button("➕ Add Account", use_container_width=True, type="primary")
 
             if submit:
                 if not email or not password:
@@ -1227,7 +1227,7 @@ elif page == "➕ Add New":
 
             st.info(f"Campaign will warm up {len(sender_ids)} sender(s) over {duration} weeks using {len(receiver_ids)} receiver(s)")
 
-            submit = st.form_submit_button("🚀 Create Campaign", width="full", type="primary")
+            submit = st.form_submit_button("🚀 Create Campaign", use_container_width=True, type="primary")
 
             if submit:
                 if not name or not sender_ids or not receiver_ids:
@@ -1343,7 +1343,7 @@ elif page == "🧪 Quick Test":
     with col_d:
         st.write("")
         st.write("")
-        if st.button("🚀 Send Test Email(s)", type="primary", width="full"):
+        if st.button("🚀 Send Test Email(s)", type="primary", use_container_width=True):
             # Create a placeholder for status updates
             status_placeholder = st.empty()
             progress_placeholder = st.empty()
@@ -1532,7 +1532,7 @@ elif page == "🧮 Estimate":
                     help="Campaign duration in weeks"
                 )
 
-            submit = st.form_submit_button("🔍 Calculate Estimate", width="full", type="primary")
+            submit = st.form_submit_button("🔍 Calculate Estimate", use_container_width=True, type="primary")
 
             if submit:
                 # Import estimator
@@ -1555,25 +1555,25 @@ elif page == "🧮 Estimate":
     with col2:
         st.subheader("Quick Presets")
 
-        if st.button("🏠 Small (10 accounts)", width="full"):
+        if st.button("🏠 Small (10 accounts)", use_container_width=True):
             st.session_state.preset_senders = 10
             st.session_state.preset_receivers = 10
             st.session_state.preset_weeks = 6
             st.rerun()
 
-        if st.button("🏢 Medium (50 accounts)", width="full"):
+        if st.button("🏢 Medium (50 accounts)", use_container_width=True):
             st.session_state.preset_senders = 50
             st.session_state.preset_receivers = 50
             st.session_state.preset_weeks = 8
             st.rerun()
 
-        if st.button("🏭 Large (200 accounts)", width="full"):
+        if st.button("🏭 Large (200 accounts)", use_container_width=True):
             st.session_state.preset_senders = 200
             st.session_state.preset_receivers = 200
             st.session_state.preset_weeks = 10
             st.rerun()
 
-        if st.button("🌐 Enterprise (500 accounts)", width="full"):
+        if st.button("🌐 Enterprise (500 accounts)", use_container_width=True):
             st.session_state.preset_senders = 500
             st.session_state.preset_receivers = 500
             st.session_state.preset_weeks = 12
@@ -2082,7 +2082,7 @@ elif page == "⚙️ Settings":
                     placeholder="Confirm new password"
                 )
 
-            submit = st.form_submit_button("🔄 Change Password", width="full", type="primary")
+            submit = st.form_submit_button("🔄 Change Password", use_container_width=True, type="primary")
 
             if submit:
                 # Validation
@@ -2118,7 +2118,7 @@ elif page == "⚙️ Settings":
 
         col_logout1, col_logout2, col_logout3 = st.columns([1, 1, 1])
         with col_logout2:
-            if st.button("🚪 Logout", type="secondary", width="full"):
+            if st.button("🚪 Logout", type="secondary", use_container_width=True):
                 # Delete session token
                 if st.session_state.session_token:
                     delete_session(st.session_state.session_token)
