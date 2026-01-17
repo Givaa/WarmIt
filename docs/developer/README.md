@@ -70,6 +70,18 @@ Complete technical reference for WarmIt email warming platform.
 | `reset_daily_counters` | Daily at 00:00 | Reset campaign counters |
 | `update_metrics` | Daily at 23:00 | Update daily statistics |
 
+### Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `TZ` | `Europe/Rome` | Timezone for all services |
+| `LOG_LEVEL` | `INFO` | Logging verbosity |
+| `DATABASE_URL` | - | PostgreSQL connection string |
+| `REDIS_URL` | - | Redis connection string |
+| `AI_PROVIDER` | `openrouter` | AI provider (openrouter/groq) |
+
+> **Note:** All Docker services use `Europe/Rome` timezone by default. Celery tasks and logs display local time.
+
 ---
 
 ## 🏗️ Architecture Overview
