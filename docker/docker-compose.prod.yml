@@ -249,11 +249,13 @@ services:
         max-file: "3"
 
   # Dozzle - Web-based log viewer
-  # NOTE: Keep internal for security - access via SSH tunnel or VPN
+  # NOTE: Bound to 127.0.0.1 only - NOT accessible from outside the server
+  # Access via: http://localhost:8888 (or SSH tunnel from remote)
   logs:
     image: amir20/dozzle:latest
     container_name: warmit-logs
-    # ports: REMOVED for security - access via localhost only
+    ports:
+      - "127.0.0.1:8888:8080"  # Localhost only - secure
     expose:
       - "8080"
     volumes:

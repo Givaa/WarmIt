@@ -60,10 +60,15 @@ src/warmit/
 │   ├── response_bot.py             # Auto-reply bot (multilingual)
 │   ├── domain_checker.py           # WHOIS/RDAP domain analysis
 │   ├── email_service.py            # SMTP/IMAP email service (multipart emails)
-│   ├── encryption.py               # 🔐 Password encryption (Fernet)
+│   ├── encryption.py               # 🔐 Password encryption (Fernet, fail-safe)
+│   ├── tracking_token.py           # 🔐 HMAC tracking tokens (v1.0.2)
 │   ├── config_profiles.py          # 📋 Configuration profile manager
 │   ├── rate_limit_tracker.py       # 💰 API rate limit tracking
 │   └── health_monitor.py           # 🏥 System health monitoring
+│
+├── 📂 middleware/                  # HTTP middleware (v1.0.3)
+│   ├── __init__.py
+│   └── rate_limit.py               # 🛡️ Rate limiting middleware
 │
 ├── 📂 tasks/                       # Celery background tasks
 │   ├── __init__.py
@@ -105,11 +110,23 @@ src/warmit/
 - Intelligent reply generation
 - Human-like delay simulation
 
-**`encryption.py`** (~128 lines)
+**`encryption.py`** (~180 lines)
 - Fernet symmetric encryption for passwords
 - Automatic encrypt on save, decrypt on load
 - Global encryption service singleton
 - Migration support
+- **SECURITY:** Never falls back to plaintext (v1.0.3)
+
+**`tracking_token.py`** (~100 lines) - *NEW in v1.0.2*
+- HMAC-SHA256 token generation for tracking URLs
+- Token validation with 30-day expiry
+- Prevents unauthorized tracking manipulation
+
+**`middleware/rate_limit.py`** (~200 lines) - *NEW in v1.0.3*
+- HTTP rate limiting for API protection
+- Per-endpoint rate limits (auth, api, tracking)
+- In-memory sliding window implementation
+- Returns 429 with Retry-After header
 
 **`config_profiles.py`** (~200 lines)
 - Loads YAML configuration profiles
@@ -136,7 +153,7 @@ src/warmit/
 ```
 dashboard/
 ├── 📄 app.py                       # Main Streamlit application (multilingual UI)
-├── 📄 auth.py                      # 🔐 Authentication module
+├── 📄 auth.py                      # 🔐 Authentication module (bcrypt v1.0.3)
 └── 📄 email_providers.py           # 20+ email provider configs
 ```
 

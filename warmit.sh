@@ -97,10 +97,10 @@ show_help() {
     echo "  ./warmit.sh reset        # Delete all data (use with caution!)"
     echo ""
     echo "Access URLs (after starting):"
-    echo "  Dashboard:  http://localhost:8501"
-    echo "  Logs:       http://localhost:8888"
-    echo "  API:        http://localhost:8000"
-    echo "  API Docs:   http://localhost:8000/docs"
+    echo "  Dashboard:  http://localhost (via Nginx)"
+    echo "  Logs:       http://localhost:8888 (localhost only)"
+    echo "  API:        Internal only (not exposed)"
+    echo "  Tracking:   http://localhost/track/* (signed URLs only)"
     echo ""
     echo "Made with  by Givaa - https://github.com/Givaa"
 }
@@ -155,12 +155,19 @@ if [ "$1" == "health" ]; then
     echo -e "${BLUE}Checking WarmIt health...${NC}"
     echo ""
 
-    # Check if API is responding
-    if curl -f -s http://localhost:8000/health > /dev/null 2>&1; then
+    # Check if Nginx is responding (public entry point)
+    if curl -f -s http://localhost/ > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Nginx (public gateway) is healthy${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Nginx not responding on port 80${NC}"
+    fi
+
+    # Check internal API health via docker exec
+    if docker exec warmit-api curl -f -s http://localhost:8000/health > /dev/null 2>&1; then
         echo -e "${GREEN}✅ API is healthy${NC}"
         echo ""
         echo "Detailed health:"
-        curl -s http://localhost:8000/health/detailed 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s http://localhost:8000/health/detailed
+        docker exec warmit-api curl -s http://localhost:8000/health/detailed 2>/dev/null | python3 -m json.tool 2>/dev/null || docker exec warmit-api curl -s http://localhost:8000/health/detailed
     else
         echo -e "${RED}❌ API is not responding${NC}"
         echo ""
@@ -395,6 +402,67 @@ else
     echo -e "${GREEN}✅ Encryption key configured${NC}"
 fi
 
+# Verify TRACKING_SECRET_KEY is configured (for secure email tracking)
+TRACKING_SECRET_KEY=""
+if grep -q "^TRACKING_SECRET_KEY=" "$ENV_FILE" 2>/dev/null; then
+    TRACKING_SECRET_KEY=$(grep "^TRACKING_SECRET_KEY=" "$ENV_FILE" | head -1)
+    TRACKING_SECRET_KEY="${TRACKING_SECRET_KEY#*=}"
+    TRACKING_SECRET_KEY="${TRACKING_SECRET_KEY%%#*}"
+    TRACKING_SECRET_KEY="${TRACKING_SECRET_KEY//[[:space:]]/}"
+    TRACKING_SECRET_KEY="${TRACKING_SECRET_KEY//\"/}"
+    TRACKING_SECRET_KEY="${TRACKING_SECRET_KEY//\'/}"
+fi
+
+if [ -z "$TRACKING_SECRET_KEY" ]; then
+    echo ""
+    echo -e "${YELLOW}⚠️  TRACKING_SECRET_KEY not configured - generating one now...${NC}"
+    echo ""
+
+    # Generate tracking secret key using OpenSSL (cross-platform)
+    echo "Generating secure tracking secret key..."
+    GENERATED_TRACKING_KEY=$(openssl rand -hex 32 2>/dev/null)
+
+    if [ -z "$GENERATED_TRACKING_KEY" ]; then
+        # Fallback: use /dev/urandom on Unix or PowerShell on Windows
+        if [ -f /dev/urandom ]; then
+            GENERATED_TRACKING_KEY=$(head -c 32 /dev/urandom | xxd -p | tr -d '\n' 2>/dev/null)
+        fi
+    fi
+
+    if [ -z "$GENERATED_TRACKING_KEY" ]; then
+        echo -e "${YELLOW}⚠️  Could not auto-generate tracking key${NC}"
+        echo "Please add TRACKING_SECRET_KEY manually to docker/.env"
+        echo "Generate with: python -c \"import secrets; print(secrets.token_hex(32))\""
+    else
+        # Add TRACKING_SECRET_KEY to .env file
+        if grep -q "^TRACKING_SECRET_KEY=" "$ENV_FILE"; then
+            # Update existing line
+            TEMP_FILE="${ENV_FILE}.tmp"
+            while IFS= read -r line || [ -n "$line" ]; do
+                if [[ "$line" == TRACKING_SECRET_KEY=* ]]; then
+                    echo "TRACKING_SECRET_KEY=$GENERATED_TRACKING_KEY"
+                else
+                    echo "$line"
+                fi
+            done < "$ENV_FILE" > "$TEMP_FILE"
+            mv "$TEMP_FILE" "$ENV_FILE"
+        else
+            # Add new line
+            echo "" >> "$ENV_FILE"
+            echo "# Auto-generated tracking secret key for secure email tracking (v1.0.2+)" >> "$ENV_FILE"
+            echo "TRACKING_SECRET_KEY=$GENERATED_TRACKING_KEY" >> "$ENV_FILE"
+        fi
+
+        echo ""
+        echo -e "${GREEN}✅ Tracking secret key generated and saved to docker/.env${NC}"
+        echo ""
+        echo -e "${YELLOW}Your tracking secret key: $GENERATED_TRACKING_KEY${NC}"
+        echo ""
+    fi
+else
+    echo -e "${GREEN}✅ Tracking secret key configured${NC}"
+fi
+
 # Verify API key is configured
 AI_PROVIDER=$(get_env_value "AI_PROVIDER" "$ENV_FILE")
 
@@ -474,15 +542,16 @@ echo ""
 echo -e "${BLUE}Service Status:${NC}"
 $DOCKER_COMPOSE -f $COMPOSE_FILE ps
 
-# Wait for API to be healthy
+# Wait for Nginx (gateway) to be healthy
 echo ""
-echo "Waiting for API to be healthy..."
+echo "Waiting for services to be healthy..."
 MAX_RETRIES=30
 RETRY_COUNT=0
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if curl -f -s http://localhost:8000/health > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ API is healthy!${NC}"
+    # Check Nginx (public gateway) - dashboard accessible
+    if curl -f -s http://localhost/ > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Nginx gateway is healthy!${NC}"
         break
     fi
     echo -n "."
@@ -492,9 +561,17 @@ done
 
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
     echo ""
-    echo -e "${RED}❌ API failed to start. Check logs:${NC}"
-    echo "  $DOCKER_COMPOSE -f $COMPOSE_FILE logs api"
-    exit 1
+    echo -e "${YELLOW}⚠️  Nginx not ready yet, checking internal API...${NC}"
+
+    # Try internal API check
+    if docker exec warmit-api curl -f -s http://localhost:8000/health > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ API is healthy (Nginx may still be starting)${NC}"
+    else
+        echo -e "${RED}❌ Services failed to start. Check logs:${NC}"
+        echo "  $DOCKER_COMPOSE -f $COMPOSE_FILE logs api"
+        echo "  $DOCKER_COMPOSE -f $COMPOSE_FILE logs nginx"
+        exit 1
+    fi
 fi
 
 # Success!
@@ -504,10 +581,10 @@ echo -e "${GREEN}🎉 WarmIt is now running! 🎉${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "${BLUE}Access URLs:${NC}"
-echo "  📊 Dashboard:  http://0.0.0.0:8501"
-echo "  📝 Logs (Web): http://localhost:8888"
-echo "  🔌 API:        http://localhost:8000"
-echo "  📖 API Docs:   http://localhost:8000/docs"
+echo "  📊 Dashboard:  http://localhost (via Nginx on port 80)"
+echo "  📝 Logs:       http://localhost:8888 (localhost only - use SSH tunnel remotely)"
+echo "  🔒 API:        Internal only (not publicly exposed)"
+echo "  📧 Tracking:   http://localhost/track/* (HMAC signed URLs)"
 echo ""
 echo -e "${BLUE}Useful Commands:${NC}"
 echo "  Service status:      $DOCKER_COMPOSE -f $COMPOSE_FILE ps"
@@ -516,10 +593,12 @@ echo "  Stop:                ./warmit.sh stop"
 echo "  Remove containers:   ./warmit.sh down"
 echo ""
 echo -e "${YELLOW}Next Steps:${NC}"
-echo "  1. Open dashboard: http://localhost:8501"
-echo "  2. Add your email accounts"
-echo "  3. Create a warming campaign"
-echo "  4. Monitor progress!"
+echo "  1. Get admin password: docker logs warmit-dashboard | grep Password"
+echo "  2. Open dashboard: http://localhost"
+echo "  3. Login with generated password"
+echo "  4. Add your email accounts"
+echo "  5. Create a warming campaign"
+echo "  6. Monitor progress!"
 echo ""
 echo -e "${GREEN}Happy warming! 🔥${NC}"
 echo ""

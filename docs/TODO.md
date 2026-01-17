@@ -69,6 +69,12 @@
 - [ ] CRM integrations (HubSpot, Salesforce)
 
 ### 12. 🔒 Advanced Security
+- [x] bcrypt password hashing ✅ v1.0.3
+- [x] Rate limiting middleware ✅ v1.0.3
+- [x] CORS restriction ✅ v1.0.3
+- [x] Nginx reverse proxy ✅ v1.0.2
+- [x] HMAC tracking tokens ✅ v1.0.2
+- [x] Database encryption (Fernet) ✅ v1.0.0
 - [ ] Two-factor authentication (2FA)
 - [ ] IP whitelist per dashboard
 - [ ] Audit log completo
@@ -118,5 +124,5 @@ Apri un issue con label `feature-request` per suggerire nuove funzionalità.
 ---
 
 **Ultima modifica**: 2026-01-17
-**Versione WarmIt**: 1.0.1
+**Versione WarmIt**: 1.0.3
 

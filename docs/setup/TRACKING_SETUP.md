@@ -38,10 +38,25 @@ Internet
 
 ## 🔧 Configuration
 
-### 1. Generate Security Keys
+### 1. Security Keys (Auto-Generated)
+
+**Good news!** When you run `./warmit.sh start`, the script automatically:
+1. Generates `TRACKING_SECRET_KEY` if not present
+2. Generates `ENCRYPTION_KEY` if not present
+3. Displays both keys in the console output
 
 ```bash
-# Generate TRACKING_SECRET_KEY (required for secure tracking)
+# Keys are auto-generated on first start:
+./warmit.sh start
+
+# Output shows:
+# ✅ TRACKING_SECRET_KEY found/generated
+# ✅ ENCRYPTION_KEY found/generated
+```
+
+**Manual generation (optional):**
+```bash
+# Generate TRACKING_SECRET_KEY manually
 python -c "import secrets; print(secrets.token_hex(32))"
 
 # Example output: a3f8c2e1d9b7f6a5c4e3d2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1
@@ -50,7 +65,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 ### 2. Edit docker/.env
 
 ```bash
-# Required: Secret key for HMAC token signatures
+# Auto-generated or manually set
 TRACKING_SECRET_KEY=a3f8c2e1d9b7f6a5c4e3d2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1
 
 # Public URL where emails can reach tracking pixels
@@ -283,4 +298,32 @@ Need help? Check the logs:
 ```bash
 ./warmit.sh logs nginx
 ./warmit.sh logs api
+```
+
+---
+
+## 📝 Viewing Logs
+
+### Dozzle Web Interface
+
+Logs are available via Dozzle at `http://localhost:8888` (localhost only for security).
+
+**Remote access via SSH tunnel:**
+```bash
+# From your local machine
+ssh -L 8888:localhost:8888 user@your-server
+
+# Then open http://localhost:8888 in your browser
+```
+
+### Command Line
+
+```bash
+# All logs
+./warmit.sh logs
+
+# Specific service
+./warmit.sh logs nginx
+./warmit.sh logs api
+./warmit.sh logs dashboard
 ```

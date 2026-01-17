@@ -16,6 +16,9 @@ Complete reference for all business logic services in WarmIt.
 - [DomainChecker](#domainchecker) - Domain age verification
 - [HealthMonitor](#healthmonitor) - System health checks
 - [RateLimitTracker](#ratelimittracker) - API rate limiting
+- [EncryptionService](#encryptionservice) - Database encryption
+- [TrackingTokenService](#trackingtokenservice) - HMAC tracking tokens
+- [RateLimitMiddleware](#ratelimitmiddleware) - HTTP rate limiting
 
 ---
 
@@ -973,5 +976,213 @@ async with async_session_maker() as session:
 
 ---
 
+## EncryptionService
+
+**File:** `src/warmit/services/encryption.py`
+
+Handles encryption/decryption of sensitive data (email passwords) using Fernet symmetric encryption.
+
+### Class Definition
+
+```python
+class EncryptionService:
+    """Handle encryption/decryption of sensitive data using Fernet."""
+
+    def __init__(self, require_key: bool = True):
+        """
+        Initialize encryption service.
+
+        Args:
+            require_key: If True, log error if ENCRYPTION_KEY not set
+
+        Note:
+            - Reads ENCRYPTION_KEY from environment
+            - If not set, encryption operations will raise EncryptionError
+            - NEVER falls back to plaintext storage
+        """
+```
+
+### Method: `encrypt()`
+
+```python
+def encrypt(self, plaintext: str) -> str:
+    """
+    Encrypt a string.
+
+    Args:
+        plaintext: String to encrypt
+
+    Returns:
+        Encrypted string (base64 encoded Fernet token)
+
+    Raises:
+        EncryptionError: If ENCRYPTION_KEY not configured
+
+    Note:
+        - NEVER falls back to plaintext
+        - Empty strings are returned as-is
+    """
+```
+
+### Method: `decrypt()`
+
+```python
+def decrypt(self, ciphertext: str) -> str:
+    """
+    Decrypt a string.
+
+    Args:
+        ciphertext: Encrypted string
+
+    Returns:
+        Decrypted plaintext
+
+    Raises:
+        EncryptionError: If data appears encrypted but key not configured
+
+    Note:
+        - Detects Fernet tokens by 'gAAAAA' prefix
+        - For backwards compatibility, non-encrypted strings returned as-is
+    """
+```
+
+**Example:**
+```python
+from warmit.services.encryption import get_encryption_service
+
+service = get_encryption_service()
+
+# Encrypt password
+encrypted = service.encrypt("my_secret_password")
+# Output: "gAAAAABk..."
+
+# Decrypt password
+decrypted = service.decrypt(encrypted)
+# Output: "my_secret_password"
+```
+
+---
+
+## TrackingTokenService
+
+**File:** `src/warmit/services/tracking_token.py`
+
+Generates and validates HMAC-SHA256 tokens for secure email tracking URLs.
+
+### Function: `generate_tracking_token()`
+
+```python
+def generate_tracking_token(email_id: int) -> Tuple[str, int]:
+    """
+    Generate HMAC token for tracking URL.
+
+    Args:
+        email_id: Database ID of the email
+
+    Returns:
+        Tuple of (token, timestamp)
+
+    Note:
+        - Token is HMAC-SHA256 of "email_id:timestamp"
+        - Truncated to 32 chars for shorter URLs
+        - Requires TRACKING_SECRET_KEY in environment
+    """
+```
+
+### Function: `validate_tracking_token()`
+
+```python
+def validate_tracking_token(email_id: int, token: str, timestamp: int) -> bool:
+    """
+    Validate tracking token.
+
+    Args:
+        email_id: Email ID from URL
+        token: Token from URL
+        timestamp: Timestamp from URL
+
+    Returns:
+        True if valid and not expired, False otherwise
+
+    Note:
+        - Tokens expire after 30 days
+        - Uses constant-time comparison (hmac.compare_digest)
+    """
+```
+
+### Function: `generate_tracking_url()`
+
+```python
+def generate_tracking_url(email_id: int, base_url: str) -> str:
+    """
+    Generate complete tracking URL with token.
+
+    Args:
+        email_id: Database ID of the email
+        base_url: API base URL (e.g., "https://warmit.example.com")
+
+    Returns:
+        Complete tracking URL with token and timestamp
+
+    Example:
+        >>> generate_tracking_url(123, "https://warmit.example.com")
+        "https://warmit.example.com/track/open/123?token=a1b2c3...&ts=1705484400"
+    """
+```
+
+---
+
+## RateLimitMiddleware
+
+**File:** `src/warmit/middleware/rate_limit.py`
+
+FastAPI middleware for protecting API endpoints from abuse.
+
+### Class Definition
+
+```python
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Middleware for rate limiting API requests."""
+```
+
+### Rate Limits
+
+| Endpoint Type | Max Requests | Window |
+|---------------|--------------|--------|
+| `/auth/*`, `/login/*` | 5 | 5 minutes |
+| `/password/*` | 3 | 5 minutes |
+| `/api/*` | 100 | 1 minute |
+| `/track/*` | 500 | 1 minute |
+| Default | 60 | 1 minute |
+
+### Response Headers
+
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 60
+```
+
+### Rate Limit Exceeded Response
+
+```json
+HTTP 429 Too Many Requests
+Retry-After: 45
+
+{
+    "detail": "Rate limit exceeded. Please retry after 45 seconds."
+}
+```
+
+**Example:**
+```python
+# In main.py
+from warmit.middleware.rate_limit import RateLimitMiddleware
+
+app.add_middleware(RateLimitMiddleware)
+```
+
+---
+
 **Last Updated:** 2026-01-17
-**Version:** 1.0.0
+**Version:** 1.0.3

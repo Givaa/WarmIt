@@ -36,10 +36,10 @@ docker logs warmit-dashboard | grep "Admin Password"
 **That's it!** ✨
 
 **Access:**
-- 📊 **Dashboard:** http://localhost:8501 (login with admin password)
-- 📝 **Logs:** http://localhost:8888
-- 🔌 **API:** http://localhost:8000
-- 📖 **API Docs:** http://localhost:8000/docs
+- 📊 **Dashboard:** http://localhost (via Nginx on port 80)
+- 📝 **Logs:** http://localhost:8888 (localhost only)
+- 🔌 **API:** Internal only (secured behind Nginx)
+- 📖 **API Docs:** Not exposed (security)
 
 **Management:**
 ```bash
@@ -219,14 +219,28 @@ IMAP: imapmail.libero.it:993 ✓
 ## 🏗️ Architecture
 
 ```
-Dashboard (8501) ──► API (8000) ──► PostgreSQL
-                        │
-                        ├──► Redis ◄──► Celery Worker
-                        │                    │
-                        └──► Watchdog ◄──────┘
+Internet
+    │
+    ▼
+┌─────────────────────────────────────┐
+│        Nginx (port 80/443)          │
+├─────────────────────────────────────┤
+│ /              → Dashboard (8501)   │  ← Protected by login
+│ /track/*       → API (8000)         │  ← Requires valid HMAC token
+│ /api/*         → BLOCKED            │  ← Not accessible
+└─────────────────────────────────────┘
+    │                    │
+    ▼                    ▼
+Dashboard ──► API ──► PostgreSQL
+              │
+              ├──► Redis ◄──► Celery Worker
+              │                    │
+              └──► Watchdog ◄──────┘
+
+Logs (Dozzle) → localhost:8888 (local only)
 ```
 
-**Tech:** Python 3.11, FastAPI, Streamlit, Celery, PostgreSQL, Redis, Docker
+**Tech:** Python 3.11, FastAPI, Streamlit, Celery, PostgreSQL, Redis, Nginx, Docker
 
 ---
 
@@ -273,4 +287,4 @@ MIT License - see [LICENSE](LICENSE)
 
 ---
 
-**Last Updated:** 2026-01-15 | **Version:** 0.2.0
+**Last Updated:** 2026-01-17 | **Version:** 1.0.3

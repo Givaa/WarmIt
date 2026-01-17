@@ -51,7 +51,7 @@ Look for:
 
 ### 5. Login
 
-1. Open http://localhost:8501
+1. Open http://localhost (via Nginx on port 80)
 2. Enter admin password from logs
 3. Dashboard loads
 
@@ -248,6 +248,67 @@ docker logs warmit-dashboard  # Look for password in output
 This means:
 - Some passwords are already encrypted (safe to ignore)
 - Or all passwords are encrypted (migration already ran)
+
+---
+
+## 📝 Accessing Logs (Dozzle)
+
+Container logs are available via Dozzle at `http://localhost:8888`.
+
+**Security:** Dozzle is bound to localhost only (`127.0.0.1:8888`) and is not accessible from the internet.
+
+### Local Access
+
+```bash
+# Open in browser
+http://localhost:8888
+```
+
+### Remote Access via SSH Tunnel
+
+If you need to access logs from a remote server:
+
+```bash
+# Create SSH tunnel from your local machine
+ssh -L 8888:localhost:8888 user@your-server
+
+# Then open in local browser
+http://localhost:8888
+```
+
+The SSH tunnel forwards your local port 8888 to the server's localhost:8888, allowing secure remote access to the logs interface.
+
+---
+
+## 🏗️ Network Architecture
+
+```
+Internet (port 80/443)
+    │
+    ▼
+┌─────────────────────────────────────┐
+│           Nginx Reverse Proxy        │
+├─────────────────────────────────────┤
+│ /              → Dashboard (8501)   │  ← Protected by login
+│ /track/*       → API (8000)         │  ← HMAC token required
+│ /api/*         → BLOCKED            │  ← Not accessible
+│ /docs          → BLOCKED            │  ← Not accessible
+└─────────────────────────────────────┘
+
+Localhost Only (not exposed to internet):
+├── Dozzle Logs: 127.0.0.1:8888
+├── API: 8000 (internal)
+├── Dashboard: 8501 (internal)
+├── PostgreSQL: 5432 (internal)
+└── Redis: 6379 (internal)
+```
+
+**Key Security Features:**
+- Only port 80 (HTTP) and 443 (HTTPS) are exposed to the internet
+- API endpoints are blocked by Nginx (only `/track/*` allowed)
+- Tracking URLs require valid HMAC tokens
+- Logs accessible only from localhost (use SSH tunnel for remote access)
+- All internal services communicate via Docker network
 
 ---
 
