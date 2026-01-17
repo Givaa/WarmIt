@@ -75,14 +75,14 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./logs:/app/logs
+      - app_logs:/app/logs
     restart: always
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 5
+      start_period: 60s
     logging:
       driver: "json-file"
       options:
@@ -118,7 +118,7 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./logs:/app/logs
+      - app_logs:/app/logs
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "celery -A warmit.tasks:celery_app inspect ping -d celery@$$HOSTNAME"]
@@ -162,7 +162,7 @@ services:
       worker:
         condition: service_started
     volumes:
-      - ./logs:/app/logs
+      - app_logs:/app/logs
       - beat_schedule:/tmp
     restart: always
     healthcheck:
@@ -321,6 +321,8 @@ volumes:
   beat_schedule:
     driver: local
   nginx_logs:
+    driver: local
+  app_logs:
     driver: local
 
 networks:
