@@ -318,10 +318,17 @@ if [ -z "$ENCRYPTION_KEY" ] || [ "$ENCRYPTION_KEY" = "your_encryption_key_here" 
         fi
     fi
 
-    # Add to .env file
-    echo "" >> "$ENV_FILE"
-    echo "# Auto-generated encryption key (DO NOT CHANGE OR LOSE THIS!)" >> "$ENV_FILE"
-    echo "ENCRYPTION_KEY=$GENERATED_KEY" >> "$ENV_FILE"
+    # Update or add ENCRYPTION_KEY in .env file
+    if grep -q "^ENCRYPTION_KEY=" "$ENV_FILE"; then
+        # Replace existing empty ENCRYPTION_KEY
+        sed -i.bak "s|^ENCRYPTION_KEY=.*|ENCRYPTION_KEY=$GENERATED_KEY|" "$ENV_FILE"
+        rm -f "${ENV_FILE}.bak"
+    else
+        # Add new ENCRYPTION_KEY
+        echo "" >> "$ENV_FILE"
+        echo "# Auto-generated encryption key (DO NOT CHANGE OR LOSE THIS!)" >> "$ENV_FILE"
+        echo "ENCRYPTION_KEY=$GENERATED_KEY" >> "$ENV_FILE"
+    fi
 
     echo ""
     echo -e "${GREEN}✅ Encryption key generated and saved to docker/.env${NC}"
