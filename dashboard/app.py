@@ -6,6 +6,8 @@ https://github.com/Givaa
 
 import streamlit as st
 import requests
+import sseclient
+import json
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -15,6 +17,7 @@ import os
 from zoneinfo import ZoneInfo
 from typing import Optional
 from email_providers import get_provider_config, get_all_providers, get_provider_by_name
+from translations import t, get_text, TRANSLATIONS
 
 
 # Date formatting helpers for consistent European format (DD/MM/YYYY)
@@ -87,6 +90,11 @@ if 'session_token' not in st.session_state:
 
 # Try to restore session from query params (persistent across reloads)
 query_params = st.query_params
+
+# Initialize language from query params or default to English
+if 'language' not in st.session_state:
+    lang_param = query_params.get('lang', 'en')
+    st.session_state.language = lang_param if lang_param in ['en', 'it'] else 'en'
 if not st.session_state.authenticated:
     # Check query params first
     if 'session' in query_params:
@@ -407,24 +415,56 @@ def delete_account(account_id):
 
 # Sidebar
 with st.sidebar:
-    st.markdown("# 🔥 WarmIt")
+    # Header with logo and language selector
+    col_logo, col_lang = st.columns([3, 1])
+    with col_logo:
+        st.markdown("# 🔥 WarmIt")
+    with col_lang:
+        # Language selector
+        lang_options = {"en": "🇬🇧", "it": "🇮🇹"}
+        current_lang = st.session_state.language
+        selected_lang = st.selectbox(
+            "Lang",
+            options=list(lang_options.keys()),
+            format_func=lambda x: lang_options[x],
+            index=list(lang_options.keys()).index(current_lang),
+            label_visibility="collapsed",
+            key="lang_selector"
+        )
+        if selected_lang != st.session_state.language:
+            st.session_state.language = selected_lang
+            st.query_params['lang'] = selected_lang
+            st.rerun()
+
     st.markdown("---")
 
     # API Health Check
     api_healthy = check_api_health()
     if api_healthy:
-        st.success("✅ Service Online")
+        st.success(f"✅ {t('api_connected')}")
     else:
-        st.error("❌ Service Unavailable")
-        st.warning("The application backend is not responding. Please contact your administrator.")
+        st.error(f"❌ {t('api_disconnected')}")
+        st.warning(t('error_api_connection'))
         st.stop()
 
     st.markdown("---")
 
-    # Navigation (only shown when authenticated)
+    # Navigation with translated labels
+    nav_items = {
+        f"📊 {t('nav_dashboard')}": "dashboard",
+        f"📧 {t('nav_accounts')}": "accounts",
+        f"🎯 {t('nav_campaigns')}": "campaigns",
+        f"📈 {t('nav_analytics')}": "analytics",
+        f"➕ {t('nav_add_new')}": "add_new",
+        f"🧪 {t('nav_quick_test')}": "quick_test",
+        f"🧮 {t('nav_estimate')}": "estimate",
+        f"💰 {t('nav_api_costs')}": "api_costs",
+        f"⚙️ {t('nav_settings')}": "settings",
+    }
+
     page = st.radio(
         "Navigation",
-        ["📊 Dashboard", "📧 Accounts", "🎯 Campaigns", "📈 Analytics", "➕ Add New", "🧪 Quick Test", "🧮 Estimate", "💰 API Costs", "⚙️ Settings"],
+        list(nav_items.keys()),
         label_visibility="collapsed"
     )
 
@@ -470,9 +510,12 @@ if st.session_state.current_page != page:
     st.session_state.current_page = page
     st.rerun()
 
+# Get current page key for comparison (extract from nav_items)
+current_page_key = nav_items.get(page, "dashboard")
+
 # Main content
-if page == "📊 Dashboard":
-    st.markdown('<h1 style="text-align: center;">🔥 WarmIt Dashboard</h1>', unsafe_allow_html=True)
+if current_page_key == "dashboard":
+    st.markdown(f'<h1 style="text-align: center;">🔥 {t("app_title")}</h1>', unsafe_allow_html=True)
 
     # Fetch data
     metrics = get_system_metrics()
@@ -480,37 +523,40 @@ if page == "📊 Dashboard":
     campaigns = get_campaigns()
 
     if not metrics:
-        st.error("Unable to fetch metrics from API")
+        st.error(t("error_load_metrics"))
         st.stop()
 
     # Top metrics
     col1, col2, col3, col4 = st.columns(4)
 
+    active_label = t("active_accounts").split()[-1] if st.session_state.language == "it" else "active"
+
     with col1:
         st.metric(
-            label="📧 Total Accounts",
+            label=f"📧 {t('total_accounts')}",
             value=metrics.get("total_accounts", 0),
-            delta=f"{metrics.get('active_accounts', 0)} active"
+            delta=f"{metrics.get('active_accounts', 0)} {active_label}"
         )
 
     with col2:
         st.metric(
-            label="🎯 Campaigns",
+            label=f"🎯 {t('total_campaigns')}",
             value=metrics.get("total_campaigns", 0),
-            delta=f"{metrics.get('active_campaigns', 0)} active"
+            delta=f"{metrics.get('active_campaigns', 0)} {active_label}"
         )
 
     with col3:
+        today_label = t("today").lower()
         st.metric(
-            label="📨 Emails Sent",
+            label=f"📨 {t('total_emails_sent')}",
             value=f"{metrics.get('total_emails_sent', 0):,}",
-            delta=f"{metrics.get('emails_sent_today', 0)} today"
+            delta=f"{metrics.get('emails_sent_today', 0)} {today_label}"
         )
 
     with col4:
         avg_open = metrics.get('average_open_rate', 0) * 100
         st.metric(
-            label="📬 Avg Open Rate",
+            label=f"📬 {t('avg_open_rate')}",
             value=f"{avg_open:.1f}%",
             delta=f"Bounce: {metrics.get('average_bounce_rate', 0)*100:.1f}%",
             delta_color="inverse"
@@ -616,52 +662,59 @@ if page == "📊 Dashboard":
         st.info("No data available yet")
 
 
-elif page == "📧 Accounts":
-    st.title("📧 Email Accounts")
+elif current_page_key == "accounts":
+    st.title(f"📧 {t('accounts_title')}")
 
     accounts = get_accounts()
+
+    # Filter options based on language
+    type_options = [t('all_statuses'), t('sender'), t('receiver')]
+    status_options = [t('all_statuses'), t('status_active'), t('status_paused'), "Disabled"]
 
     # Filter
     col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
-        account_type = st.selectbox("Type", ["All", "Sender", "Receiver"])
+        account_type = st.selectbox(t('account_type'), type_options)
     with col2:
-        account_status = st.selectbox("Status", ["All", "Active", "Paused", "Disabled"])
+        account_status = st.selectbox(t('status'), status_options)
     with col3:
         st.write("")
         st.write("")
-        if st.button("🔄 Refresh", use_container_width=True):
+        if st.button(f"🔄 {t('refresh')}", use_container_width=True):
             st.rerun()
 
     # Filter accounts
     filtered = accounts
-    if account_type != "All":
-        filtered = [a for a in filtered if a.get('type') == account_type.lower()]
-    if account_status != "All":
-        filtered = [a for a in filtered if a.get('status') == account_status.lower()]
+    if account_type != type_options[0]:  # Not "All"
+        filter_type = "sender" if account_type == t('sender') else "receiver"
+        filtered = [a for a in filtered if a.get('type') == filter_type]
+    if account_status != status_options[0]:  # Not "All"
+        filter_status = "active" if account_status == t('status_active') else "paused" if account_status == t('status_paused') else "disabled"
+        filtered = [a for a in filtered if a.get('status') == filter_status]
 
-    st.markdown(f"**Showing {len(filtered)} of {len(accounts)} accounts**")
+    st.markdown(f"**{len(filtered)} / {len(accounts)} accounts**")
 
     # Display accounts
     for acc in filtered:
-        with st.expander(f"{acc.get('email')} - {acc.get('type').upper()}"):
+        acc_type_label = t('sender').upper() if acc.get('type') == 'sender' else t('receiver').upper()
+        with st.expander(f"{acc.get('email')} - {acc_type_label}"):
             col1, col2, col3 = st.columns([2, 2, 1])
 
             with col1:
-                st.write("**Status:**", acc.get('status').upper())
-                st.write("**Domain:**", acc.get('domain', 'Unknown'))
-                st.write("**Domain Age:**", f"{acc.get('domain_age_days', 'Unknown')} days" if acc.get('domain_age_days') else "Unknown")
-                st.write("**Daily Limit:**", acc.get('current_daily_limit'))
+                st.write(f"**{t('status')}:**", acc.get('status').upper())
+                st.write(f"**{t('account_domain')}:**", acc.get('domain', t('na')))
+                st.write(f"**{t('account_domain_age')}:**", f"{acc.get('domain_age_days', t('na'))} {t('account_days')}" if acc.get('domain_age_days') else t('na'))
+                st.write(f"**{t('account_daily_limit')}:**", acc.get('current_daily_limit'))
 
             with col2:
-                st.write("**Sent:**", acc.get('total_sent', 0))
-                st.write("**Received:**", acc.get('total_received', 0))
-                st.write("**Opened:**", acc.get('total_opened', 0))
-                st.write("**Replied:**", acc.get('total_replied', 0))
+                st.write(f"**{t('sent')}:**", acc.get('total_sent', 0))
+                st.write(f"**{t('received')}:**", acc.get('total_received', 0))
+                st.write(f"**{t('opened')}:**", acc.get('total_opened', 0))
+                st.write(f"**{t('replied')}:**", acc.get('total_replied', 0))
 
             with col3:
-                st.metric("Open Rate", f"{acc.get('open_rate', 0)*100:.1f}%")
-                st.metric("Reply Rate", f"{acc.get('reply_rate', 0)*100:.1f}%")
+                st.metric(t('open_rate'), f"{acc.get('open_rate', 0)*100:.1f}%")
+                st.metric(t('reply_rate'), f"{acc.get('reply_rate', 0)*100:.1f}%")
                 st.metric("Bounce Rate", f"{acc.get('bounce_rate', 0)*100:.1f}%")
 
             # Actions
@@ -715,66 +768,77 @@ elif page == "📧 Accounts":
                         st.rerun()
 
 
-elif page == "🎯 Campaigns":
-    st.title("🎯 Warming Campaigns")
+elif current_page_key == "campaigns":
+    st.title(f"🎯 {t('campaigns_title')}")
 
     campaigns = get_campaigns()
+
+    # Filter options
+    status_filter_options = {
+        t('all_statuses'): None,
+        t('status_active'): 'active',
+        t('status_paused'): 'paused',
+        t('status_completed'): 'completed',
+        t('status_pending'): 'pending'
+    }
 
     # Filter
     col1, col2 = st.columns([3, 1])
     with col1:
-        campaign_status = st.selectbox("Status", ["All", "Active", "Paused", "Completed", "Pending"])
+        campaign_status = st.selectbox(t('status'), list(status_filter_options.keys()))
     with col2:
         st.write("")
         st.write("")
-        if st.button("🔄 Refresh", use_container_width=True):
+        if st.button(f"🔄 {t('refresh')}", use_container_width=True):
             st.rerun()
 
     # Filter campaigns
     filtered = campaigns
-    if campaign_status != "All":
-        filtered = [c for c in filtered if c.get('status') == campaign_status.lower()]
+    filter_value = status_filter_options.get(campaign_status)
+    if filter_value:
+        filtered = [c for c in filtered if c.get('status') == filter_value]
 
-    st.markdown(f"**Showing {len(filtered)} of {len(campaigns)} campaigns**")
+    st.markdown(f"**{len(filtered)} / {len(campaigns)} {t('total_campaigns').lower()}**")
 
     # Display campaigns
     for camp in filtered:
-        with st.expander(f"{camp.get('name')} - {camp.get('status').upper()}"):
+        status_label = camp.get('status', '').upper()
+        with st.expander(f"{camp.get('name')} - {status_label}"):
             # Progress bar
             progress = camp.get('progress_percentage', 0)
             st.progress(progress / 100)
-            st.caption(f"Progress: {progress:.0f}% • Week {camp.get('current_week')}/{camp.get('duration_weeks')}")
+            st.caption(f"{t('campaign_progress')}: {progress:.0f}% • {t('campaign_week')} {camp.get('current_week')}/{camp.get('duration_weeks')}")
 
             col1, col2, col3 = st.columns(3)
 
             with col1:
-                st.write("**Today's Target:**", camp.get('target_emails_today'))
-                st.write("**Sent Today:**", camp.get('emails_sent_today'))
-                st.write("**Total Sent:**", camp.get('total_emails_sent'))
-                st.write("**Senders:**", len(camp.get('sender_account_ids', [])))
-                st.write("**Receivers:**", len(camp.get('receiver_account_ids', [])))
+                st.write(f"**{t('todays_target')}:**", camp.get('target_emails_today'))
+                st.write(f"**{t('sent_today')}:**", camp.get('emails_sent_today'))
+                st.write(f"**{t('total_sent')}:**", camp.get('total_emails_sent'))
+                st.write(f"**{t('senders')}:**", len(camp.get('sender_account_ids', [])))
+                st.write(f"**{t('receivers')}:**", len(camp.get('receiver_account_ids', [])))
 
             with col2:
-                st.metric("Open Rate", f"{camp.get('open_rate', 0)*100:.1f}%")
-                st.metric("Reply Rate", f"{camp.get('reply_rate', 0)*100:.1f}%")
-                st.metric("Bounce Rate", f"{camp.get('bounce_rate', 0)*100:.1f}%")
+                st.metric(t('open_rate'), f"{camp.get('open_rate', 0)*100:.1f}%")
+                st.metric(t('reply_rate'), f"{camp.get('reply_rate', 0)*100:.1f}%")
+                st.metric(t('bounce_rate'), f"{camp.get('bounce_rate', 0)*100:.1f}%")
 
             with col3:
-                st.write("**Start Date:**", format_date(camp.get('start_date')))
-                st.write("**End Date:**", format_date(camp.get('end_date')) if camp.get('end_date') else 'Ongoing')
-                st.write("**Duration:**", f"{camp.get('duration_weeks')} weeks")
+                st.write(f"**{t('start_date')}:**", format_date(camp.get('start_date')))
+                st.write(f"**{t('end_date')}:**", format_date(camp.get('end_date')) if camp.get('end_date') else t('ongoing'))
+                st.write(f"**{t('campaign_duration')}:**", f"{camp.get('duration_weeks')} {t('campaign_weeks')}")
                 lang = camp.get('language', 'en')
                 lang_display = "🇬🇧 English" if lang == "en" else "🇮🇹 Italiano"
-                st.write("**Language:**", lang_display)
+                st.write(f"**{t('campaign_language')}:**", lang_display)
 
                 # Display next send time if available
                 if camp.get('next_send_time'):
-                    st.write("**Next Send:**", format_datetime(camp.get('next_send_time')))
+                    st.write(f"**{t('next_send')}:**", format_datetime(camp.get('next_send_time')))
 
             st.markdown("---")
 
             # Sender Statistics Section
-            st.subheader("📊 Per-Sender Statistics")
+            st.subheader(f"📊 {t('sender_stats')}")
 
             sender_stats_data = get_campaign_sender_stats(camp['id'])
 
@@ -995,7 +1059,7 @@ elif page == "🎯 Campaigns":
                         st.rerun()
 
 
-elif page == "📈 Analytics":
+elif current_page_key == "analytics":
     st.title("📈 Analytics & Reports")
 
     # Date range selector
@@ -1059,25 +1123,26 @@ elif page == "📈 Analytics":
         st.info("No data available for the selected time range")
 
 
-elif page == "➕ Add New":
-    st.title("➕ Add New")
+elif current_page_key == "add_new":
+    st.title(f"➕ {t('nav_add_new')}")
 
-    tab1, tab2 = st.tabs(["📧 Add Account", "🎯 Create Campaign"])
+    tab1, tab2 = st.tabs([f"📧 {t('add_account')}", f"🎯 {t('create_campaign')}"])
 
     with tab1:
-        st.subheader("Add Email Account")
+        st.subheader(t('add_account_title'))
 
         # Provider selection or auto-detection
-        st.markdown("##### 📬 Provider Configuration")
+        st.markdown(f"##### 📬 {t('account_provider')}")
 
         # Get list of providers for dropdown
         providers_list = get_all_providers()
-        provider_names = ["Auto-detect from email"] + [name for _, name in providers_list]
+        provider_names = [t('auto_detect')] + [name for _, name in providers_list]
 
         selected_provider_name = st.selectbox(
-            "Email Provider",
+            t('account_provider'),
             provider_names,
-            help="Select your email provider or choose 'Auto-detect' to auto-fill based on email address"
+            help=t('auto_detect'),
+            label_visibility="collapsed"
         )
 
         # Initialize session state for form fields if not exists
@@ -1091,35 +1156,37 @@ elif page == "➕ Add New":
 
             with col1:
                 email = st.text_input(
-                    "Email Address*",
+                    f"{t('email_address')}*",
                     value=st.session_state.form_email,
                     placeholder="example@gmail.com",
                     key="email_input"
                 )
-                account_type = st.selectbox("Account Type*", ["sender", "receiver"])
+                type_options = [t('sender'), t('receiver')]
+                account_type_label = st.selectbox(f"{t('account_type')}*", type_options)
+                account_type = "sender" if account_type_label == t('sender') else "receiver"
                 password = st.text_input(
-                    "Password*",
+                    f"{t('smtp_password')}*",
                     type="password",
-                    help="Use App Password for providers that require it (Gmail, Yahoo, etc.)"
+                    help=t('smtp_password')
                 )
 
             # Get config based on selection or auto-detect
-            if selected_provider_name == "Auto-detect from email":
+            if selected_provider_name == t('auto_detect'):
                 config = get_provider_config(email)
             else:
                 config = get_provider_by_name(selected_provider_name)
 
             with col2:
-                smtp_host = st.text_input("SMTP Host*", value=config.get("smtp_host", "smtp.gmail.com"))
+                smtp_host = st.text_input(f"{t('smtp_host')}*", value=config.get("smtp_host", "smtp.gmail.com"))
                 smtp_port = st.number_input(
-                    "SMTP Port*",
+                    f"{t('smtp_port')}*",
                     value=config.get("smtp_port", 587),
                     min_value=1,
                     max_value=65535
                 )
-                imap_host = st.text_input("IMAP Host*", value=config.get("imap_host", "imap.gmail.com"))
+                imap_host = st.text_input(f"{t('imap_host')}*", value=config.get("imap_host", "imap.gmail.com"))
                 imap_port = st.number_input(
-                    "IMAP Port*",
+                    f"{t('imap_port')}*",
                     value=config.get("imap_port", 993),
                     min_value=1,
                     max_value=65535
@@ -1271,45 +1338,47 @@ elif page == "➕ Add New":
                             st.error(f"❌ Failed to create campaign: {result}")
 
 
-elif page == "🧪 Quick Test":
-    st.title("🧪 Quick Email Test")
-    st.markdown("Send test emails immediately to verify account configurations and email generation.")
+elif current_page_key == "quick_test":
+    st.title(f"🧪 {t('quick_test_title')}")
+    st.markdown(t('quick_test_subtitle'))
 
     accounts = get_accounts()
     senders = [a for a in accounts if a.get('type') == 'sender' and a.get('status') == 'active']
     receivers = [a for a in accounts if a.get('type') == 'receiver' and a.get('status') == 'active']
 
     if not senders or not receivers:
-        st.warning("⚠️ You need at least 1 active sender and 1 active receiver to run tests.")
+        st.warning(f"⚠️ {t('no_senders') if not senders else ''} {t('no_receivers') if not receivers else ''}")
         if not senders:
-            st.info("Add a sender account in **'➕ Add New'** → **'📧 Add Account'**")
+            st.info(f"{t('add_account')} → {t('sender')}")
         if not receivers:
-            st.info("Add a receiver account in **'➕ Add New'** → **'📧 Add Account'**")
+            st.info(f"{t('add_account')} → {t('receiver')}")
         st.stop()
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("📤 Select Sender")
+        st.subheader(f"📤 {t('select_sender')}")
         sender_id = st.selectbox(
-            "Sender Account",
+            t('sender'),
             options=[s['id'] for s in senders],
-            format_func=lambda x: next(s['email'] for s in senders if s['id'] == x)
+            format_func=lambda x: next(s['email'] for s in senders if s['id'] == x),
+            label_visibility="collapsed"
         )
         sender = next(s for s in senders if s['id'] == sender_id)
 
-        st.info(f"**Email:** {sender['email']}\n\n**Domain:** {sender.get('domain', 'N/A')}\n\n**Daily Limit:** {sender.get('current_daily_limit')}")
+        st.info(f"**Email:** {sender['email']}\n\n**{t('account_domain')}:** {sender.get('domain', t('na'))}\n\n**{t('account_daily_limit')}:** {sender.get('current_daily_limit')}")
 
     with col2:
-        st.subheader("📥 Select Receiver")
+        st.subheader(f"📥 {t('select_receiver')}")
         receiver_id = st.selectbox(
-            "Receiver Account",
+            t('receiver'),
             options=[r['id'] for r in receivers],
-            format_func=lambda x: next(r['email'] for r in receivers if r['id'] == x)
+            format_func=lambda x: next(r['email'] for r in receivers if r['id'] == x),
+            label_visibility="collapsed"
         )
         receiver = next(r for r in receivers if r['id'] == receiver_id)
 
-        st.info(f"**Email:** {receiver['email']}\n\n**Domain:** {receiver.get('domain', 'N/A')}")
+        st.info(f"**Email:** {receiver['email']}\n\n**{t('account_domain')}:** {receiver.get('domain', t('na'))}")
 
     st.markdown("---")
 
@@ -1318,87 +1387,132 @@ elif page == "🧪 Quick Test":
 
     with col_a:
         num_emails = st.number_input(
-            "Number of test emails",
+            t('num_emails'),
             min_value=1,
             max_value=10,
             value=1,
-            help="Send multiple test emails in sequence"
+            help=t('num_emails')
         )
 
     with col_b:
         include_replies = st.checkbox(
-            "Auto-reply from receiver",
+            t('include_replies'),
             value=True,
-            help="Receivers will automatically reply to test emails"
+            help=t('include_replies_help')
         )
 
     with col_c:
         email_language = st.selectbox(
-            "Email Language",
+            t('email_language'),
             options=["en", "it"],
             format_func=lambda x: "🇬🇧 English" if x == "en" else "🇮🇹 Italiano",
-            help="Language for email content generation"
+            help=t('email_language')
         )
 
     with col_d:
         st.write("")
         st.write("")
-        if st.button("🚀 Send Test Email(s)", type="primary", use_container_width=True):
-            # Create a placeholder for status updates
+        if st.button(f"🚀 {t('send_test_emails')}", type="primary", use_container_width=True):
+            # Create placeholders for real-time updates
             status_placeholder = st.empty()
             progress_placeholder = st.empty()
+            details_placeholder = st.empty()
 
             try:
                 # Show initial status
-                status_placeholder.info(f"🔄 Connecting to API...")
-
-                # Calculate total operations
-                total_ops = num_emails
-                if include_replies:
-                    total_ops *= 2  # Each email + reply
-
-                # Initialize progress
+                status_placeholder.info("🔄 Connecting to API...")
                 progress_placeholder.progress(0)
 
-                # Prepare spinner text
-                spinner_text = f"📤 Generating and sending {num_emails} test email(s)"
-                if include_replies:
-                    spinner_text += " with auto-replies"
-                lang_flag = "🇮🇹" if email_language == "it" else "🇬🇧"
-                spinner_text += f" {lang_flag}..."
+                # Use SSE streaming endpoint for real-time progress
+                import sseclient
 
-                with st.spinner(spinner_text):
-                    # Update status
-                    status_placeholder.info(f"✉️ Sending request to API...")
+                response = requests.post(
+                    f"{API_BASE_URL}/api/test/send-emails-stream",
+                    json={
+                        "sender_id": sender_id,
+                        "receiver_id": receiver_id,
+                        "count": num_emails,
+                        "include_replies": include_replies,
+                        "language": email_language
+                    },
+                    stream=True,
+                    timeout=300  # 5 minute timeout
+                )
 
-                    # Call API endpoint to send test emails
-                    response = requests.post(
-                        f"{API_BASE_URL}/api/test/send-emails",
-                        json={
-                            "sender_id": sender_id,
-                            "receiver_id": receiver_id,
-                            "count": num_emails,
-                            "include_replies": include_replies,
-                            "language": email_language
-                        },
-                        timeout=120  # 2 minute timeout for test emails with replies
-                    )
+                if response.status_code != 200:
+                    status_placeholder.empty()
+                    progress_placeholder.empty()
+                    st.error(f"❌ Failed to send test emails (HTTP {response.status_code})")
+                    with st.expander("🔍 Error Details"):
+                        st.code(response.text)
+                else:
+                    # Process SSE events
+                    client = sseclient.SSEClient(response)
+                    final_result = None
+                    current_progress = 0
 
-                    # Update progress to 50% while waiting for response
-                    progress_placeholder.progress(0.5)
-                    status_placeholder.info(f"⏳ Processing emails on server...")
+                    for event in client.events():
+                        if event.data:
+                            try:
+                                data = json.loads(event.data)
+                                event_type = data.get('type')
 
-                    if response.status_code == 200:
-                        result = response.json()
-                        emails_sent = result.get('emails_sent', 0)
-                        replies_sent = result.get('replies_sent', 0)
+                                if event_type == 'progress':
+                                    step = data.get('step')
+                                    msg = data.get('message', '')
 
-                        # Complete progress
-                        progress_placeholder.progress(1.0)
+                                    if step == 'generating':
+                                        status_placeholder.info(f"🤖 {msg}")
+                                    elif step == 'sending':
+                                        status_placeholder.info(f"📤 {msg}")
+                                    elif step == 'generating_reply':
+                                        status_placeholder.info(f"🤖 {msg}")
+                                    elif step == 'sending_reply':
+                                        status_placeholder.info(f"📨 {msg}")
 
-                        # Clear status and show success
-                        status_placeholder.empty()
-                        progress_placeholder.empty()
+                                elif event_type == 'email_sent':
+                                    current_progress = data.get('progress', 0)
+                                    progress_placeholder.progress(current_progress / 100)
+                                    email_num = data.get('email_num')
+                                    status_placeholder.success(f"✅ Email {email_num} sent!")
+
+                                elif event_type == 'reply_sent':
+                                    current_progress = data.get('progress', 0)
+                                    progress_placeholder.progress(current_progress / 100)
+                                    email_num = data.get('email_num')
+                                    status_placeholder.success(f"✅ Reply {email_num} sent!")
+
+                                elif event_type == 'email_failed':
+                                    current_progress = data.get('progress', 0)
+                                    progress_placeholder.progress(current_progress / 100)
+                                    email_num = data.get('email_num')
+                                    status_placeholder.error(f"❌ Email {email_num} failed!")
+
+                                elif event_type == 'reply_failed':
+                                    current_progress = data.get('progress', 0)
+                                    progress_placeholder.progress(current_progress / 100)
+                                    email_num = data.get('email_num')
+                                    status_placeholder.warning(f"⚠️ Reply {email_num} failed!")
+
+                                elif event_type == 'error':
+                                    msg = data.get('message', 'Unknown error')
+                                    status_placeholder.error(f"❌ Error: {msg}")
+
+                                elif event_type == 'complete':
+                                    final_result = data
+                                    break
+
+                            except json.JSONDecodeError:
+                                pass
+
+                    # Clear progress indicators
+                    status_placeholder.empty()
+                    progress_placeholder.empty()
+
+                    # Show final results
+                    if final_result:
+                        emails_sent = final_result.get('emails_sent', 0)
+                        replies_sent = final_result.get('replies_sent', 0)
 
                         success_msg = f"✅ Successfully sent {emails_sent} test email(s)"
                         if include_replies and replies_sent > 0:
@@ -1406,10 +1520,10 @@ elif page == "🧪 Quick Test":
                         success_msg += "!"
                         st.success(success_msg)
 
-                        # Show results
-                        if result.get('emails'):
+                        # Show email details
+                        if final_result.get('emails'):
                             with st.expander("📧 Email Details", expanded=True):
-                                for i, email_info in enumerate(result['emails'], 1):
+                                for i, email_info in enumerate(final_result['emails'], 1):
                                     st.write(f"**Email {i}:**")
                                     st.write(f"- Subject: `{email_info.get('subject')}`")
                                     st.write(f"- From: `{email_info.get('from')}`")
@@ -1421,31 +1535,22 @@ elif page == "🧪 Quick Test":
                                     elif include_replies:
                                         st.write(f"- ❌ No reply sent")
 
-                                    if i < len(result['emails']):
+                                    if i < len(final_result['emails']):
                                         st.markdown("---")
 
                         st.info("💡 Check both inboxes to verify email delivery, replies, and content quality.")
                     else:
-                        # Clear progress and status
-                        status_placeholder.empty()
-                        progress_placeholder.empty()
-
-                        # Show error with details
-                        st.error(f"❌ Failed to send test emails (HTTP {response.status_code})")
-                        with st.expander("🔍 Error Details"):
-                            st.code(response.text)
+                        st.warning("⚠️ No response received from server")
 
             except requests.exceptions.Timeout:
-                # Clear progress and status
                 status_placeholder.empty()
                 progress_placeholder.empty()
 
-                st.error("❌ Request timed out after 2 minutes")
+                st.error("❌ Request timed out after 5 minutes")
                 st.warning("This may happen with multiple emails and replies. The emails might still be sending in the background.")
                 st.info("💡 Check server logs for details")
 
             except requests.exceptions.ConnectionError:
-                # Clear progress and status
                 status_placeholder.empty()
                 progress_placeholder.empty()
 
@@ -1490,7 +1595,7 @@ elif page == "🧪 Quick Test":
     """)
 
 
-elif page == "🧮 Estimate":
+elif current_page_key == "estimate":
     st.title("🧮 Campaign Resource Estimator")
     st.markdown("Plan your campaign infrastructure by estimating required resources.")
 
@@ -1763,9 +1868,9 @@ services:
     """)
 
 
-elif page == "💰 API Costs":
-    st.title("💰 API Costs & Rate Limits")
-    st.markdown("Monitor API usage and avoid rate limit exhaustion.")
+elif current_page_key == "api_costs":
+    st.title(f"💰 {t('api_costs_title')}")
+    st.markdown(t('api_costs_subtitle'))
 
     # Import dependencies
     # In Docker, warmit is at /app/warmit (parent.parent from dashboard/app.py)
@@ -1778,12 +1883,12 @@ elif page == "💰 API Costs":
         tracker = get_rate_limit_tracker()
         statuses = tracker.get_all_statuses()
     except Exception as e:
-        st.error(f"Failed to load rate limit tracker: {e}")
-        st.info("Make sure the API and services are running properly")
+        st.error(f"{t('error')}: {e}")
+        st.info(t('error_api_connection'))
         st.stop()
 
     # Overall status
-    st.subheader("📊 Overall Status")
+    st.subheader(f"📊 {t('status')}")
 
     col1, col2, col3 = st.columns(3)
 
@@ -1792,25 +1897,27 @@ elif page == "💰 API Costs":
 
     with col1:
         st.metric(
-            "Total Requests Today",
+            t('requests_today'),
             f"{total_requests_today:,}",
-            help="Combined requests across all providers"
+            help=t('requests_today')
         )
 
     with col2:
         utilization = (total_requests_today / total_limit_today * 100) if total_limit_today > 0 else 0
+        remaining_label = "rimanenti" if st.session_state.language == "it" else "remaining"
         st.metric(
-            "Overall Utilization",
+            t('utilization'),
             f"{utilization:.1f}%",
-            delta=f"{total_limit_today - total_requests_today:,} remaining"
+            delta=f"{total_limit_today - total_requests_today:,} {remaining_label}"
         )
 
     with col3:
         exhausted_count = sum(1 for info in statuses.values() if info.is_exhausted)
         status_color = "🔴" if exhausted_count > 0 else "🟢"
+        available_label = t('available_keys').split()[0] if st.session_state.language == "it" else "Available"
         st.metric(
-            "Provider Status",
-            f"{status_color} {len(statuses) - exhausted_count}/{len(statuses)} Available"
+            t('provider'),
+            f"{status_color} {len(statuses) - exhausted_count}/{len(statuses)} {available_label}"
         )
 
     st.markdown("---")
@@ -2050,57 +2157,57 @@ elif page == "💰 API Costs":
     st.caption("💡 **Tip:** Refresh this page to see updated statistics. Auto-refresh is enabled.")
 
 
-elif page == "⚙️ Settings":
-    st.title("⚙️ Settings")
+elif current_page_key == "settings":
+    st.title(f"⚙️ {t('settings_title')}")
 
-    tab1, tab2 = st.tabs(["🔐 Change Password", "ℹ️ About"])
+    tab1, tab2 = st.tabs([f"🔐 {t('change_password')}", "ℹ️ About"])
 
     with tab1:
-        st.subheader("Change Admin Password")
-        st.markdown("Update your dashboard admin password for security.")
+        st.subheader(t('change_password'))
+        st.markdown(t('settings_subtitle'))
 
         with st.form("change_password_form"):
             current_password = st.text_input(
-                "Current Password*",
+                f"{t('current_password')}*",
                 type="password",
-                placeholder="Enter your current password"
+                placeholder=t('current_password')
             )
 
             col1, col2 = st.columns(2)
 
             with col1:
                 new_password = st.text_input(
-                    "New Password*",
+                    f"{t('new_password')}*",
                     type="password",
-                    placeholder="Enter new password (min 8 chars)"
+                    placeholder=t('new_password')
                 )
 
             with col2:
                 confirm_password = st.text_input(
-                    "Confirm New Password*",
+                    f"{t('confirm_password')}*",
                     type="password",
-                    placeholder="Confirm new password"
+                    placeholder=t('confirm_password')
                 )
 
-            submit = st.form_submit_button("🔄 Change Password", use_container_width=True, type="primary")
+            submit = st.form_submit_button(f"🔄 {t('change_password')}", use_container_width=True, type="primary")
 
             if submit:
                 # Validation
                 if not current_password or not new_password or not confirm_password:
-                    st.error("⚠️ Please fill in all fields")
+                    st.error(f"⚠️ {t('error')}")
                 elif new_password != confirm_password:
-                    st.error("❌ New passwords do not match")
+                    st.error(f"❌ {t('password_mismatch')}")
                 elif len(new_password) < 8:
-                    st.error("❌ New password must be at least 8 characters")
+                    st.error(f"❌ {t('error')}")
                 else:
                     # Attempt password change
                     success, message = change_password(current_password, new_password)
 
                     if success:
-                        st.success(f"✅ {message}")
+                        st.success(f"✅ {t('password_changed')}")
                         st.info("💡 Please remember your new password. There is no password recovery!")
                     else:
-                        st.error(f"❌ {message}")
+                        st.error(f"❌ {t('wrong_password')}")
 
         st.markdown("---")
         st.info("""

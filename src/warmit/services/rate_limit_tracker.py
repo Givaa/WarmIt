@@ -1,11 +1,14 @@
 """API rate limit tracking and monitoring system with multi-key support.
 
+Uses Redis for persistence across processes (API, Worker, Dashboard).
+
 Developed with ❤️ by Givaa
 https://github.com/Givaa
 """
 
 import time
 import os
+import json
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple, List
 from dataclasses import dataclass, field
@@ -13,6 +16,25 @@ from collections import deque
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Redis client for persistence
+_redis_client = None
+
+
+def _get_redis():
+    """Get Redis client for rate limit persistence."""
+    global _redis_client
+    if _redis_client is None:
+        try:
+            import redis
+            redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+            _redis_client = redis.from_url(redis_url, decode_responses=True)
+            _redis_client.ping()  # Test connection
+            logger.info(f"Rate limit tracker connected to Redis")
+        except Exception as e:
+            logger.warning(f"Redis not available for rate tracking: {e}")
+            _redis_client = None
+    return _redis_client
 
 
 @dataclass
@@ -262,6 +284,9 @@ class RateLimitTracker:
             logger.warning(f"Unknown key: {key_id}")
             return True
 
+        # Sync from Redis first
+        self._sync_from_redis(key_id)
+
         info = self.keys[key_id]
         current_time = time.time()
 
@@ -288,7 +313,51 @@ class RateLimitTracker:
         # Add to hourly history
         info.hourly_history.append(current_time)
 
+        # Persist to Redis
+        self._sync_to_redis(key_id)
+
         return True
+
+    def _sync_to_redis(self, key_id: str):
+        """Persist rate limit data to Redis."""
+        redis = _get_redis()
+        if not redis or key_id not in self.keys:
+            return
+
+        try:
+            info = self.keys[key_id]
+            data = {
+                "requests_this_minute": info.requests_this_minute,
+                "requests_today": info.requests_today,
+                "minute_reset_time": info.minute_reset_time,
+                "day_reset_time": info.day_reset_time,
+                "last_request_time": info.last_request_time,
+                "hourly_history": list(info.hourly_history)[-60:],  # Keep last 60
+            }
+            redis.set(f"ratelimit:{key_id}", json.dumps(data), ex=86400)  # Expire in 24h
+        except Exception as e:
+            logger.debug(f"Failed to sync to Redis: {e}")
+
+    def _sync_from_redis(self, key_id: str):
+        """Load rate limit data from Redis."""
+        redis = _get_redis()
+        if not redis or key_id not in self.keys:
+            return
+
+        try:
+            data = redis.get(f"ratelimit:{key_id}")
+            if data:
+                parsed = json.loads(data)
+                info = self.keys[key_id]
+                info.requests_this_minute = parsed.get("requests_this_minute", 0)
+                info.requests_today = parsed.get("requests_today", 0)
+                info.minute_reset_time = parsed.get("minute_reset_time", time.time() + 60)
+                info.day_reset_time = parsed.get("day_reset_time", _get_next_midnight_timestamp())
+                info.last_request_time = parsed.get("last_request_time", 0)
+                history = parsed.get("hourly_history", [])
+                info.hourly_history = deque(history, maxlen=60)
+        except Exception as e:
+            logger.debug(f"Failed to sync from Redis: {e}")
 
     def _check_resets(self, key_id: str):
         """Check and perform counter resets if needed.
@@ -328,6 +397,7 @@ class RateLimitTracker:
         if key_id not in self.keys:
             return True, ""
 
+        self._sync_from_redis(key_id)  # Load latest from Redis
         self._check_resets(key_id)
 
         info = self.keys[key_id]
@@ -363,6 +433,7 @@ class RateLimitTracker:
         best_remaining = -1
 
         for key_id in provider_keys:
+            self._sync_from_redis(key_id)  # Load latest from Redis
             self._check_resets(key_id)
             can_use, _ = self.can_make_request(key_id)
 
@@ -386,6 +457,7 @@ class RateLimitTracker:
             RateLimitInfo or None
         """
         if key_id in self.keys:
+            self._sync_from_redis(key_id)  # Load latest from Redis
             self._check_resets(key_id)
         return self.keys.get(key_id)
 
@@ -429,6 +501,7 @@ class RateLimitTracker:
         available = 0
 
         for key_id in provider_keys:
+            self._sync_from_redis(key_id)  # Load latest from Redis
             self._check_resets(key_id)
             info = self.keys[key_id]
 
@@ -456,6 +529,7 @@ class RateLimitTracker:
     def get_all_statuses(self) -> Dict[str, RateLimitInfo]:
         """Get status for all keys."""
         for key_id in self.keys:
+            self._sync_from_redis(key_id)  # Load latest from Redis
             self._check_resets(key_id)
         return self.keys.copy()
 
@@ -516,6 +590,8 @@ class RateLimitTracker:
             info.minute_reset_time = time.time() + 60
             info.day_reset_time = _get_next_midnight_timestamp()
             info.is_exhausted = False
+            info.hourly_history.clear()
+            self._sync_to_redis(key_id)  # Persist reset to Redis
             logger.info(f"Manually reset {key_id} counters")
 
 
