@@ -291,6 +291,97 @@ async def get_campaign_sender_stats(
     }
 
 
+@router.get("/{campaign_id}/receiver-stats")
+async def get_campaign_receiver_stats(
+    campaign_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Get detailed statistics for each receiver in a campaign.
+
+    Returns per-receiver metrics including emails received, replies sent, etc.
+    """
+    from sqlalchemy import func
+    from warmit.models.email import Email, EmailStatus
+
+    # Get campaign
+    result = await session.execute(select(Campaign).where(Campaign.id == campaign_id))
+    campaign = result.scalar_one_or_none()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    # Get receiver accounts
+    result = await session.execute(
+        select(Account).where(Account.id.in_(campaign.receiver_account_ids))
+    )
+    receivers = result.scalars().all()
+
+    receiver_stats = []
+
+    for receiver in receivers:
+        # Count emails received by this receiver in this campaign
+        emails_received_result = await session.execute(
+            select(func.count(Email.id))
+            .where(Email.receiver_id == receiver.id)
+            .where(Email.campaign_id == campaign_id)
+        )
+        emails_received = emails_received_result.scalar() or 0
+
+        # Count emails opened by this receiver
+        emails_opened_result = await session.execute(
+            select(func.count(Email.id))
+            .where(Email.receiver_id == receiver.id)
+            .where(Email.campaign_id == campaign_id)
+            .where(Email.opened_at.isnot(None))
+        )
+        emails_opened = emails_opened_result.scalar() or 0
+
+        # Count replies sent by this receiver
+        replies_sent_result = await session.execute(
+            select(func.count(Email.id))
+            .where(Email.receiver_id == receiver.id)
+            .where(Email.campaign_id == campaign_id)
+            .where(Email.replied_at.isnot(None))
+        )
+        replies_sent = replies_sent_result.scalar() or 0
+
+        # Count bounced emails to this receiver
+        emails_bounced_result = await session.execute(
+            select(func.count(Email.id))
+            .where(Email.receiver_id == receiver.id)
+            .where(Email.campaign_id == campaign_id)
+            .where(Email.status == EmailStatus.BOUNCED)
+        )
+        emails_bounced = emails_bounced_result.scalar() or 0
+
+        # Calculate rates
+        open_rate = (emails_opened / emails_received * 100) if emails_received > 0 else 0
+        reply_rate = (replies_sent / emails_received * 100) if emails_received > 0 else 0
+        bounce_rate = (emails_bounced / emails_received * 100) if emails_received > 0 else 0
+
+        receiver_stats.append({
+            "receiver_id": receiver.id,
+            "receiver_email": receiver.email,
+            "receiver_name": receiver.full_name,
+            "domain": receiver.domain,
+            "status": receiver.status.value,
+            "emails_received": emails_received,
+            "emails_opened": emails_opened,
+            "replies_sent": replies_sent,
+            "emails_bounced": emails_bounced,
+            "open_rate": round(open_rate, 2),
+            "reply_rate": round(reply_rate, 2),
+            "bounce_rate": round(bounce_rate, 2),
+        })
+
+    return {
+        "campaign_id": campaign_id,
+        "campaign_name": campaign.name,
+        "receiver_stats": receiver_stats,
+    }
+
+
 @router.delete("/{campaign_id}", status_code=204)
 async def delete_campaign(
     campaign_id: int,

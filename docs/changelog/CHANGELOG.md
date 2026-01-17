@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.1] - 2026-01-17
 
-### Windows Support & Improvements
+### Windows Support, Receiver Stats & European Date Format
 
 #### Added
 - **Windows Support**: `warmit.sh` now works on Windows with Git Bash
@@ -15,14 +15,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `get_env_value()` function for portable .env parsing
   - Updated README with Windows installation instructions
 
+- **Receiver Statistics**: New per-receiver stats in Campaigns page
+  - New API endpoint: `GET /api/campaigns/{id}/receiver-stats`
+  - Dashboard shows per-receiver metrics (received, opened, replies, bounced)
+  - Summary metrics for all receivers in campaign
+
+- **Quick Test Documentation**: Clear info about what gets counted
+  - Documented that test emails don't count in campaign metrics
+  - Clarified that AI API calls ARE tracked (visible in API Costs page)
+  - Warning about 2 API calls per test when auto-replies enabled
+
 #### Changed
 - `warmit.sh`: Refactored env file parsing to use pure bash string manipulation
 - `Makefile`: Cross-platform `open` command for dashboard/api-docs targets
 - README: Updated management section to use `warmit.sh` (was incorrectly showing `start.sh`)
+- **Date format**: All dates now use European format (DD/MM/YYYY) instead of ISO
+  - Added `format_date()` and `format_datetime()` helpers in dashboard
+  - Campaign dates, charts, and next send times all use DD/MM/YYYY
+  - Timezone conversion to Europe/Rome for display
 
 #### Fixed
 - `.env` file parsing now correctly handles comments and whitespace on all platforms
 - Fixed timezone configuration: Celery and all Docker services now use Europe/Rome
+- Plotly charts now show dates in European format (DD/MM/YYYY)
 
 ---
 

@@ -13,7 +13,48 @@ from datetime import datetime, timedelta
 import time
 import os
 from zoneinfo import ZoneInfo
+from typing import Optional
 from email_providers import get_provider_config, get_all_providers, get_provider_by_name
+
+
+# Date formatting helpers for consistent European format (DD/MM/YYYY)
+ITALY_TZ = ZoneInfo("Europe/Rome")
+
+
+def format_date(date_str: Optional[str], include_time: bool = False) -> str:
+    """Format ISO date string to European format (DD/MM/YYYY).
+
+    Args:
+        date_str: ISO format date string (e.g., "2026-01-17T10:30:45+00:00")
+        include_time: If True, includes time in format DD/MM/YYYY HH:MM
+
+    Returns:
+        Formatted date string or 'N/A' if invalid
+    """
+    if not date_str:
+        return "N/A"
+    try:
+        # Parse ISO format
+        dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        # Convert to Italy timezone
+        dt_italy = dt.astimezone(ITALY_TZ)
+        if include_time:
+            return dt_italy.strftime("%d/%m/%Y %H:%M")
+        return dt_italy.strftime("%d/%m/%Y")
+    except (ValueError, AttributeError):
+        # Fallback: try to extract just the date part
+        try:
+            return datetime.strptime(date_str[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+        except:
+            return str(date_str)[:10] if date_str else "N/A"
+
+
+def format_datetime(date_str: Optional[str]) -> str:
+    """Format ISO date string to European format with time (DD/MM/YYYY HH:MM)."""
+    return format_date(date_str, include_time=True)
+
+
+# Additional imports (after helper functions)
 from auth import (check_auth, get_or_create_password, change_password,
                   create_session_token, save_session, validate_session, delete_session)
 import logging
@@ -332,6 +373,16 @@ def get_campaign_sender_stats(campaign_id):
         return None
 
 
+def get_campaign_receiver_stats(campaign_id):
+    """Get detailed receiver statistics for a campaign."""
+    try:
+        response = requests.get(f"{API_BASE_URL}/api/campaigns/{campaign_id}/receiver-stats")
+        return response.json() if response.ok else None
+    except Exception as e:
+        st.error(f"Error fetching receiver stats: {e}")
+        return None
+
+
 def delete_campaign(campaign_id):
     """Delete a campaign."""
     try:
@@ -556,7 +607,8 @@ if page == "📊 Dashboard":
         fig.update_layout(
             height=400,
             hovermode='x unified',
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            xaxis=dict(tickformat="%d/%m/%Y")  # European date format
         )
 
         st.plotly_chart(fig, use_container_width=True)
@@ -708,8 +760,8 @@ elif page == "🎯 Campaigns":
                 st.metric("Bounce Rate", f"{camp.get('bounce_rate', 0)*100:.1f}%")
 
             with col3:
-                st.write("**Start Date:**", camp.get('start_date', 'N/A')[:10] if camp.get('start_date') else 'N/A')
-                st.write("**End Date:**", camp.get('end_date', 'N/A')[:10] if camp.get('end_date') else 'Ongoing')
+                st.write("**Start Date:**", format_date(camp.get('start_date')))
+                st.write("**End Date:**", format_date(camp.get('end_date')) if camp.get('end_date') else 'Ongoing')
                 st.write("**Duration:**", f"{camp.get('duration_weeks')} weeks")
                 lang = camp.get('language', 'en')
                 lang_display = "🇬🇧 English" if lang == "en" else "🇮🇹 Italiano"
@@ -717,17 +769,7 @@ elif page == "🎯 Campaigns":
 
                 # Display next send time if available
                 if camp.get('next_send_time'):
-                    next_send = camp.get('next_send_time')
-                    try:
-                        from datetime import datetime
-                        from zoneinfo import ZoneInfo
-                        # Parse the ISO timestamp and convert to Italy time
-                        next_dt = datetime.fromisoformat(next_send.replace('Z', '+00:00'))
-                        italy_tz = ZoneInfo("Europe/Rome")
-                        next_italy = next_dt.astimezone(italy_tz)
-                        st.write("**Next Send:**", next_italy.strftime("%Y-%m-%d %H:%M"))
-                    except:
-                        st.write("**Next Send:**", str(next_send)[:16])
+                    st.write("**Next Send:**", format_datetime(camp.get('next_send_time')))
 
             st.markdown("---")
 
@@ -820,6 +862,92 @@ elif page == "🎯 Campaigns":
 
             st.markdown("---")
 
+            # Receiver Statistics Section
+            st.subheader("📥 Per-Receiver Statistics")
+
+            receiver_stats_data = get_campaign_receiver_stats(camp['id'])
+
+            if receiver_stats_data and receiver_stats_data.get('receiver_stats'):
+                receiver_stats = receiver_stats_data['receiver_stats']
+
+                # Create DataFrame for better visualization
+                df_recv = pd.DataFrame(receiver_stats)
+
+                # Reorder columns for better readability
+                column_order_recv = [
+                    'receiver_email',
+                    'emails_received',
+                    'emails_opened',
+                    'open_rate',
+                    'replies_sent',
+                    'reply_rate',
+                    'emails_bounced',
+                    'bounce_rate',
+                    'status'
+                ]
+
+                # Filter to only existing columns
+                available_columns_recv = [col for col in column_order_recv if col in df_recv.columns]
+                df_recv_display = df_recv[available_columns_recv].copy()
+
+                # Rename columns for display
+                df_recv_display.columns = [
+                    'Receiver',
+                    'Received',
+                    'Opened',
+                    'Open %',
+                    'Replies Sent',
+                    'Reply %',
+                    'Bounced',
+                    'Bounce %',
+                    'Status'
+                ]
+
+                # Format the dataframe
+                st.dataframe(
+                    df_recv_display,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                # Summary metrics in columns
+                st.markdown("**Summary:**")
+                col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+
+                total_received = sum(s['emails_received'] for s in receiver_stats)
+                total_opened_recv = sum(s['emails_opened'] for s in receiver_stats)
+                total_replies = sum(s['replies_sent'] for s in receiver_stats)
+                total_bounced_recv = sum(s['emails_bounced'] for s in receiver_stats)
+
+                with col_r1:
+                    st.metric("Total Received", total_received)
+                with col_r2:
+                    avg_open_recv = (total_opened_recv / total_received * 100) if total_received > 0 else 0
+                    st.metric("Avg Open Rate", f"{avg_open_recv:.1f}%")
+                with col_r3:
+                    avg_reply_recv = (total_replies / total_received * 100) if total_received > 0 else 0
+                    st.metric("Avg Reply Rate", f"{avg_reply_recv:.1f}%")
+                with col_r4:
+                    avg_bounce_recv = (total_bounced_recv / total_received * 100) if total_received > 0 else 0
+                    st.metric("Avg Bounce Rate", f"{avg_bounce_recv:.1f}%")
+
+                # Health warnings for receivers
+                inactive_receivers = [r for r in receiver_stats if r['status'] != 'active']
+                if inactive_receivers:
+                    st.warning(f"⚠️ {len(inactive_receivers)} receiver(s) are not active")
+                    for recv in inactive_receivers:
+                        st.caption(f"  • {recv['receiver_email']}: {recv['status']}")
+
+                low_reply_receivers = [r for r in receiver_stats if r['emails_received'] > 5 and r['reply_rate'] < 50]
+                if low_reply_receivers:
+                    st.info(f"ℹ️ {len(low_reply_receivers)} receiver(s) have reply rate < 50% (with 5+ emails received)")
+                    for recv in low_reply_receivers:
+                        st.caption(f"  • {recv['receiver_email']}: {recv['reply_rate']:.1f}% reply rate")
+            else:
+                st.info("No receiver statistics available yet. Send some emails first!")
+
+            st.markdown("---")
+
             # Actions
             col1, col2 = st.columns(2)
 
@@ -895,6 +1023,7 @@ elif page == "📈 Analytics":
                 'emails_replied': '#2196F3'
             }
         )
+        fig.update_layout(xaxis=dict(tickformat="%d/%m/%Y"))  # European date format
         st.plotly_chart(fig, use_container_width=True)
 
         # Rates
@@ -907,7 +1036,11 @@ elif page == "📈 Analytics":
         fig.add_trace(go.Scatter(x=df['date'], y=df['open_rate_pct'], name='Open Rate', line=dict(color='#4CAF50')))
         fig.add_trace(go.Scatter(x=df['date'], y=df['reply_rate_pct'], name='Reply Rate', line=dict(color='#2196F3')))
         fig.add_trace(go.Scatter(x=df['date'], y=df['bounce_rate_pct'], name='Bounce Rate', line=dict(color='#FF5252')))
-        fig.update_layout(yaxis_title='Rate (%)', hovermode='x unified')
+        fig.update_layout(
+            yaxis_title='Rate (%)',
+            hovermode='x unified',
+            xaxis=dict(tickformat="%d/%m/%Y")  # European date format
+        )
         st.plotly_chart(fig, use_container_width=True)
 
         # Summary stats
@@ -1340,7 +1473,16 @@ elif page == "🧪 Quick Test":
     - ✅ Test automatic replies from receivers (optional)
     - ✅ Test emails in multiple languages (English/Italian)
 
-    **Note:** Test emails are sent immediately and **do not** count towards warming campaign metrics.
+    **What's NOT counted:**
+    - ❌ Campaign metrics (sent, opened, replied, bounced)
+    - ❌ Account statistics (total_sent, bounce_rate)
+    - ❌ Daily email counters
+    - ❌ Analytics charts and reports
+
+    **What IS counted:**
+    - ⚠️ **AI API usage** - Each test email uses AI to generate content, consuming API credits
+    - ⚠️ With auto-replies enabled, each test uses **2 AI calls** (email + reply)
+    - 📊 API calls are tracked in **💰 API Costs** page (rate limits, daily usage)
 
     **Auto-replies:** When enabled, receivers will automatically reply to test emails after 2 seconds, simulating real email conversations.
 

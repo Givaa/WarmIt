@@ -50,8 +50,10 @@
 - [ ] Mobile app (React Native / Flutter)
 
 ### 9. 🌍 Internationalization
-- [ ] Multi-language support (EN, IT, ES, FR, DE)
-- [ ] Timezone auto-detection
+- [x] Multi-language support for emails (EN, IT) ✅ v1.0.0
+- [x] European date format (DD/MM/YYYY) ✅ v1.0.1
+- [x] Timezone Europe/Rome ✅ v1.0.1
+- [ ] Multi-language dashboard UI (EN, IT, ES, FR, DE)
 - [ ] Locale-specific email templates
 
 ### 10. 📊 Advanced Analytics
@@ -115,6 +117,6 @@ Apri un issue con label `feature-request` per suggerire nuove funzionalità.
 
 ---
 
-**Ultima modifica**: 2026-01-15
-**Versione WarmIt**: 0.2.0-dev
+**Ultima modifica**: 2026-01-17
+**Versione WarmIt**: 1.0.1
 
