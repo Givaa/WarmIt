@@ -10,7 +10,7 @@ from warmit.models.base import Base
 # in Celery workers that create new event loops
 engine = create_async_engine(
     settings.database_url,
-    echo=settings.debug,
+    echo=False,  # Disabled - too verbose even in debug mode
     future=True,
     poolclass=NullPool,  # Disable connection pooling for Celery compatibility
 )

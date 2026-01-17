@@ -131,6 +131,7 @@ async def get_system_metrics(
     Get system-wide metrics.
 
     Provides an overview of all accounts, campaigns, and email statistics.
+    Calculates stats directly from Email table for accuracy.
     """
     from warmit.models.campaign import Campaign, CampaignStatus
     from warmit.models.account import AccountStatus
@@ -153,11 +154,19 @@ async def get_system_metrics(
     )
     active_campaigns = result.scalar_one()
 
-    # Email statistics
-    result = await session.execute(select(func.sum(Account.total_sent)))
+    # Email statistics - count directly from Email table for accuracy
+    result = await session.execute(
+        select(func.count(Email.id)).where(Email.status == EmailStatus.SENT)
+    )
     total_sent = result.scalar_one() or 0
 
-    result = await session.execute(select(func.sum(Account.total_received)))
+    # Count received (emails where receiver got them)
+    result = await session.execute(
+        select(func.count(Email.id)).where(
+            Email.status == EmailStatus.SENT,
+            Email.receiver_id.isnot(None)
+        )
+    )
     total_received = result.scalar_one() or 0
 
     # Today's emails
@@ -170,33 +179,28 @@ async def get_system_metrics(
     )
     emails_sent_today = result.scalar_one()
 
-    # Average rates - calculate from database columns, not @property methods
-    # Open rate = total_opened / total_sent
+    # Calculate rates directly from Email table
+    # Open rate = opened / sent
     result = await session.execute(
-        select(func.sum(Account.total_opened), func.sum(Account.total_sent))
+        select(func.count(Email.id)).where(Email.opened_at.isnot(None))
     )
-    row = result.one()
-    total_opened = row[0] or 0
-    total_sent_for_open = row[1] or 0
-    avg_open_rate = total_opened / total_sent_for_open if total_sent_for_open > 0 else 0.0
+    total_opened = result.scalar_one() or 0
+    avg_open_rate = total_opened / total_sent if total_sent > 0 else 0.0
 
-    # Reply rate = total_replied / total_received
+    # Reply rate = replied / sent
     result = await session.execute(
-        select(func.sum(Account.total_replied), func.sum(Account.total_received))
+        select(func.count(Email.id)).where(Email.replied_at.isnot(None))
     )
-    row = result.one()
-    total_replied = row[0] or 0
-    total_received_for_reply = row[1] or 0
-    avg_reply_rate = total_replied / total_received_for_reply if total_received_for_reply > 0 else 0.0
+    total_replied = result.scalar_one() or 0
+    avg_reply_rate = total_replied / total_sent if total_sent > 0 else 0.0
 
-    # Bounce rate = total_bounced / total_sent
+    # Bounce rate = bounced / total attempted
     result = await session.execute(
-        select(func.sum(Account.total_bounced), func.sum(Account.total_sent))
+        select(func.count(Email.id)).where(Email.status == EmailStatus.BOUNCED)
     )
-    row = result.one()
-    total_bounced = row[0] or 0
-    total_sent_for_bounce = row[1] or 0
-    avg_bounce_rate = total_bounced / total_sent_for_bounce if total_sent_for_bounce > 0 else 0.0
+    total_bounced = result.scalar_one() or 0
+    total_attempted = total_sent + total_bounced
+    avg_bounce_rate = total_bounced / total_attempted if total_attempted > 0 else 0.0
 
     return SystemMetrics(
         total_accounts=total_accounts,

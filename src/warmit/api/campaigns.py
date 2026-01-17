@@ -1,18 +1,70 @@
 """Campaign management API endpoints."""
 
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from warmit.database import get_session
 from warmit.models.campaign import Campaign, CampaignStatus
 from warmit.models.account import Account
+from warmit.models.email import Email, EmailStatus
 from warmit.services.scheduler import WarmupScheduler
 
 
 router = APIRouter()
+
+
+async def sync_campaign_stats(session: AsyncSession, campaign: Campaign) -> Campaign:
+    """
+    Synchronize campaign statistics from the Email table.
+
+    This ensures stats are always accurate even if counters get out of sync.
+    """
+    # Count total emails sent for this campaign
+    result = await session.execute(
+        select(func.count(Email.id))
+        .where(Email.campaign_id == campaign.id)
+        .where(Email.status == EmailStatus.SENT)
+    )
+    campaign.total_emails_sent = result.scalar() or 0
+
+    # Count opened emails
+    result = await session.execute(
+        select(func.count(Email.id))
+        .where(Email.campaign_id == campaign.id)
+        .where(Email.opened_at.isnot(None))
+    )
+    campaign.total_emails_opened = result.scalar() or 0
+
+    # Count replied emails
+    result = await session.execute(
+        select(func.count(Email.id))
+        .where(Email.campaign_id == campaign.id)
+        .where(Email.replied_at.isnot(None))
+    )
+    campaign.total_emails_replied = result.scalar() or 0
+
+    # Count bounced emails
+    result = await session.execute(
+        select(func.count(Email.id))
+        .where(Email.campaign_id == campaign.id)
+        .where(Email.status == EmailStatus.BOUNCED)
+    )
+    campaign.total_emails_bounced = result.scalar() or 0
+
+    # Count emails sent today
+    today = date.today()
+    result = await session.execute(
+        select(func.count(Email.id))
+        .where(Email.campaign_id == campaign.id)
+        .where(Email.status == EmailStatus.SENT)
+        .where(func.date(Email.sent_at) == today)
+    )
+    campaign.emails_sent_today = result.scalar() or 0
+
+    return campaign
 
 
 # Pydantic schemas
@@ -114,6 +166,10 @@ async def list_campaigns(
     result = await session.execute(query)
     campaigns = result.scalars().all()
 
+    # Sync stats from Email table to ensure accuracy
+    for campaign in campaigns:
+        await sync_campaign_stats(session, campaign)
+
     return campaigns
 
 
@@ -128,6 +184,9 @@ async def get_campaign(
 
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+
+    # Sync stats from Email table to ensure accuracy
+    await sync_campaign_stats(session, campaign)
 
     return campaign
 
