@@ -263,15 +263,16 @@ else
         # Backup old .env
         cp "$ENV_FILE" "$ENV_FILE.backup.$(date +%Y%m%d_%H%M%S)"
         
-        # Add missing keys
+        # Add missing keys (comments on separate lines to avoid parsing issues)
         if ! grep -q "OPENROUTER_API_KEY_2" "$ENV_FILE"; then
             echo "" >> "$ENV_FILE"
             echo "# Multiple API keys for fallback (v0.2.0+)" >> "$ENV_FILE"
-            echo "OPENROUTER_API_KEY_2=  # Optional: 2nd OpenRouter key for fallback" >> "$ENV_FILE"
-            echo "OPENROUTER_API_KEY_3=  # Optional: 3rd OpenRouter key for fallback" >> "$ENV_FILE"
-            echo "GROQ_API_KEY_2=  # Optional: 2nd Groq key for fallback" >> "$ENV_FILE"
+            echo "# Optional: Add additional API keys for automatic failover" >> "$ENV_FILE"
+            echo "OPENROUTER_API_KEY_2=" >> "$ENV_FILE"
+            echo "OPENROUTER_API_KEY_3=" >> "$ENV_FILE"
+            echo "GROQ_API_KEY_2=" >> "$ENV_FILE"
         fi
-        
+
         if ! grep -q "ENCRYPTION_KEY" "$ENV_FILE"; then
             echo "" >> "$ENV_FILE"
             echo "# Security - Encryption Key for sensitive data (v0.2.0+)" >> "$ENV_FILE"
