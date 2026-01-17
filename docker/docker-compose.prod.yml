@@ -124,8 +124,8 @@ services:
       test: ["CMD-SHELL", "celery -A warmit.tasks:celery_app inspect ping -d celery@$$HOSTNAME"]
       interval: 60s
       timeout: 30s
-      retries: 3
-      start_period: 60s
+      retries: 5
+      start_period: 90s
     logging:
       driver: "json-file"
       options:
