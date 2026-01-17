@@ -64,23 +64,28 @@ show_help() {
     echo "  restart         Restart all services"
     echo "  stop            Stop all services (keep containers)"
     echo "  down            Stop and remove all containers (keep data)"
-    echo "  reset           ⚠️  Delete EVERYTHING (containers, volumes, data)"
+    echo "  reset           Delete EVERYTHING (containers, volumes, data)"
+    echo "  status          Show service status"
+    echo "  logs [service]  Show logs (api, worker, dashboard, postgres, redis)"
+    echo "  db-shell        Open PostgreSQL interactive shell"
+    echo "  health          Check API health status"
     echo "  help            Show this help menu"
     echo ""
     echo "Examples:"
     echo "  ./warmit.sh              # Start services"
     echo "  ./warmit.sh restart      # Restart services"
     echo "  ./warmit.sh stop         # Stop services"
-    echo "  ./warmit.sh down         # Remove containers"
+    echo "  ./warmit.sh logs api     # View API logs"
+    echo "  ./warmit.sh db-shell     # Open database shell"
     echo "  ./warmit.sh reset        # Delete all data (use with caution!)"
     echo ""
     echo "Access URLs (after starting):"
-    echo "  📊 Dashboard:  http://localhost:8501"
-    echo "  📝 Logs:       http://localhost:8888"
-    echo "  🔌 API:        http://localhost:8000"
-    echo "  📖 API Docs:   http://localhost:8000/docs"
+    echo "  Dashboard:  http://localhost:8501"
+    echo "  Logs:       http://localhost:8888"
+    echo "  API:        http://localhost:8000"
+    echo "  API Docs:   http://localhost:8000/docs"
     echo ""
-    echo "Made with ❤️  by Givaa - https://github.com/Givaa"
+    echo "Made with  by Givaa - https://github.com/Givaa"
 }
 
 # Handle help command
@@ -95,6 +100,55 @@ if [ "$1" == "restart" ]; then
     $DOCKER_COMPOSE -f $COMPOSE_FILE restart
     echo ""
     echo -e "${GREEN}✅ WarmIt restarted!${NC}"
+    exit 0
+fi
+
+if [ "$1" == "status" ]; then
+    echo -e "${BLUE}WarmIt Service Status:${NC}"
+    echo ""
+    $DOCKER_COMPOSE -f $COMPOSE_FILE ps
+    exit 0
+fi
+
+if [ "$1" == "logs" ]; then
+    SERVICE="$2"
+    if [ -z "$SERVICE" ]; then
+        echo -e "${BLUE}Showing all logs (Ctrl+C to exit)...${NC}"
+        $DOCKER_COMPOSE -f $COMPOSE_FILE logs -f --tail=100
+    else
+        echo -e "${BLUE}Showing $SERVICE logs (Ctrl+C to exit)...${NC}"
+        $DOCKER_COMPOSE -f $COMPOSE_FILE logs -f --tail=100 "$SERVICE"
+    fi
+    exit 0
+fi
+
+if [ "$1" == "db-shell" ]; then
+    echo -e "${BLUE}Opening PostgreSQL shell...${NC}"
+    echo -e "${YELLOW}Useful commands:${NC}"
+    echo "  \\dt                    - List all tables"
+    echo "  \\d accounts            - Describe accounts table"
+    echo "  SELECT * FROM accounts; - View all accounts"
+    echo "  \\q                     - Quit"
+    echo ""
+    docker exec -it warmit-postgres psql -U warmit -d warmit
+    exit 0
+fi
+
+if [ "$1" == "health" ]; then
+    echo -e "${BLUE}Checking WarmIt health...${NC}"
+    echo ""
+
+    # Check if API is responding
+    if curl -f -s http://localhost:8000/health > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ API is healthy${NC}"
+        echo ""
+        echo "Detailed health:"
+        curl -s http://localhost:8000/health/detailed 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s http://localhost:8000/health/detailed
+    else
+        echo -e "${RED}❌ API is not responding${NC}"
+        echo ""
+        echo "Check if services are running: ./warmit.sh status"
+    fi
     exit 0
 fi
 

@@ -343,6 +343,17 @@ def delete_campaign(campaign_id):
         return False, str(e)
 
 
+def delete_account(account_id):
+    """Delete an account."""
+    try:
+        response = requests.delete(
+            f"{API_BASE_URL}/api/accounts/{account_id}"
+        )
+        return response.status_code == 204, response.text if response.status_code != 204 else "Deleted"
+    except Exception as e:
+        return False, str(e)
+
+
 # Sidebar
 with st.sidebar:
     st.markdown("# 🔥 WarmIt")
@@ -623,6 +634,33 @@ elif page == "📧 Accounts":
                 if st.button(f"📊 View Metrics", key=f"metrics_{acc['id']}"):
                     st.session_state.selected_account = acc['id']
                     st.rerun()
+
+            with col3:
+                if st.button(f"🗑️ Delete", key=f"delete_acc_{acc['id']}", type="secondary"):
+                    # Initialize confirmation state
+                    if 'confirm_delete_account' not in st.session_state:
+                        st.session_state.confirm_delete_account = None
+                    st.session_state.confirm_delete_account = acc['id']
+
+            # Show confirmation dialog if delete was clicked
+            if st.session_state.get('confirm_delete_account') == acc['id']:
+                st.warning(f"⚠️ Are you sure you want to delete account '{acc.get('email')}'?")
+                st.caption("This action cannot be undone. All associated data will be lost.")
+                conf_col1, conf_col2 = st.columns(2)
+                with conf_col1:
+                    if st.button("✅ Yes, delete", key=f"confirm_yes_acc_{acc['id']}", type="primary"):
+                        success, msg = delete_account(acc['id'])
+                        if success:
+                            st.success("Account deleted successfully")
+                            st.session_state.confirm_delete_account = None
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"Failed to delete account: {msg}")
+                with conf_col2:
+                    if st.button("❌ Cancel", key=f"confirm_no_acc_{acc['id']}"):
+                        st.session_state.confirm_delete_account = None
+                        st.rerun()
 
 
 elif page == "🎯 Campaigns":

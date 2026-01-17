@@ -18,8 +18,8 @@ celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
-    timezone="UTC",
-    enable_utc=True,
+    timezone="Europe/Rome",
+    enable_utc=False,
     beat_schedule={
         # Process campaigns every 2 hours during business hours (8am - 8pm)
         "process-campaigns": {
