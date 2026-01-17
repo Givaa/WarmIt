@@ -24,6 +24,23 @@ COMPOSE_FILE="docker/docker-compose.prod.yml"
 ENV_FILE="docker/.env"
 ENV_EXAMPLE=".env.example"
 
+# Cross-platform function to get env value (works on Windows/Git Bash, macOS, Linux)
+# Usage: get_env_value "VAR_NAME" "/path/to/file"
+get_env_value() {
+    local var_name="$1"
+    local file="$2"
+    local value=""
+    if grep -q "^${var_name}=" "$file" 2>/dev/null; then
+        value=$(grep "^${var_name}=" "$file" | head -1)
+        value="${value#*=}"           # Remove everything before =
+        value="${value%%#*}"          # Remove comments
+        value="${value//[[:space:]]/}" # Remove whitespace
+        value="${value//\"/}"         # Remove double quotes
+        value="${value//\'/}"         # Remove single quotes
+    fi
+    echo "$value"
+}
+
 # Check if Docker is running (needed for all commands)
 if ! docker info > /dev/null 2>&1; then
     echo -e "${RED}❌ Error: Docker is not running${NC}"
@@ -222,13 +239,28 @@ if [ ! -f "$ENV_FILE" ]; then
         echo "Creating docker/.env from .env.example..."
         cp "$ENV_EXAMPLE" "$ENV_FILE"
 
-        # Update for production
-        sed -i.bak 's|sqlite+aiosqlite:///./warmit.db|postgresql+asyncpg://warmit:warmit_secure_password_2026@postgres:5432/warmit|g' "$ENV_FILE"
-        sed -i.bak 's|redis://localhost:6379/0|redis://redis:6379/0|g' "$ENV_FILE"
-        sed -i.bak 's|DEBUG=true|DEBUG=false|g' "$ENV_FILE"
-        # Ensure POSTGRES_PASSWORD matches DATABASE_URL
-        sed -i.bak 's|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=warmit_secure_password_2026|g' "$ENV_FILE"
-        rm -f "${ENV_FILE}.bak"
+        # Update for production (cross-platform without sed -i)
+        TEMP_FILE="${ENV_FILE}.tmp"
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Replace SQLite with PostgreSQL
+            if [[ "$line" == *"sqlite+aiosqlite:///./warmit.db"* ]]; then
+                line="${line//sqlite+aiosqlite:\/\/.\\/warmit.db/postgresql+asyncpg:\/\/warmit:warmit_secure_password_2026@postgres:5432\/warmit}"
+            fi
+            # Replace localhost Redis with Docker Redis
+            if [[ "$line" == *"redis://localhost:6379/0"* ]]; then
+                line="${line//redis:\/\/localhost:6379\/0/redis:\/\/redis:6379\/0}"
+            fi
+            # Set DEBUG to false
+            if [[ "$line" == "DEBUG=true" ]]; then
+                line="DEBUG=false"
+            fi
+            # Set POSTGRES_PASSWORD
+            if [[ "$line" == POSTGRES_PASSWORD=* ]]; then
+                line="POSTGRES_PASSWORD=warmit_secure_password_2026"
+            fi
+            echo "$line"
+        done < "$ENV_FILE" > "$TEMP_FILE"
+        mv "$TEMP_FILE" "$ENV_FILE"
 
         echo -e "${GREEN}✅ Created docker/.env${NC}"
     else
@@ -290,8 +322,19 @@ else
 fi
 
 # Verify ENCRYPTION_KEY is configured (CRITICAL for data security)
-ENCRYPTION_KEY=$(grep "^ENCRYPTION_KEY=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'' | sed 's/#.*//')
+# Extract value after = and trim whitespace (cross-platform compatible)
+ENCRYPTION_KEY=""
+if grep -q "^ENCRYPTION_KEY=" "$ENV_FILE" 2>/dev/null; then
+    # Get the line, extract after =, remove quotes and whitespace
+    ENCRYPTION_KEY=$(grep "^ENCRYPTION_KEY=" "$ENV_FILE" | head -1)
+    ENCRYPTION_KEY="${ENCRYPTION_KEY#*=}"  # Remove everything before =
+    ENCRYPTION_KEY="${ENCRYPTION_KEY%%#*}"  # Remove comments
+    ENCRYPTION_KEY="${ENCRYPTION_KEY//[[:space:]]/}"  # Remove whitespace
+    ENCRYPTION_KEY="${ENCRYPTION_KEY//\"/}"  # Remove double quotes
+    ENCRYPTION_KEY="${ENCRYPTION_KEY//\'/}"  # Remove single quotes
+fi
 
+# Check if key is empty or placeholder
 if [ -z "$ENCRYPTION_KEY" ] || [ "$ENCRYPTION_KEY" = "your_encryption_key_here" ]; then
     echo ""
     echo -e "${YELLOW}⚠️  ENCRYPTION_KEY not configured - generating one now...${NC}"
@@ -319,11 +362,18 @@ if [ -z "$ENCRYPTION_KEY" ] || [ "$ENCRYPTION_KEY" = "your_encryption_key_here" 
         fi
     fi
 
-    # Update or add ENCRYPTION_KEY in .env file
+    # Update or add ENCRYPTION_KEY in .env file (cross-platform without sed -i)
     if grep -q "^ENCRYPTION_KEY=" "$ENV_FILE"; then
-        # Replace existing empty ENCRYPTION_KEY
-        sed -i.bak "s|^ENCRYPTION_KEY=.*|ENCRYPTION_KEY=$GENERATED_KEY|" "$ENV_FILE"
-        rm -f "${ENV_FILE}.bak"
+        # Create temp file, replace the line, then move back
+        TEMP_FILE="${ENV_FILE}.tmp"
+        while IFS= read -r line || [ -n "$line" ]; do
+            if [[ "$line" == ENCRYPTION_KEY=* ]]; then
+                echo "ENCRYPTION_KEY=$GENERATED_KEY"
+            else
+                echo "$line"
+            fi
+        done < "$ENV_FILE" > "$TEMP_FILE"
+        mv "$TEMP_FILE" "$ENV_FILE"
     else
         # Add new ENCRYPTION_KEY
         echo "" >> "$ENV_FILE"
@@ -334,11 +384,11 @@ if [ -z "$ENCRYPTION_KEY" ] || [ "$ENCRYPTION_KEY" = "your_encryption_key_here" 
     echo ""
     echo -e "${GREEN}✅ Encryption key generated and saved to docker/.env${NC}"
     echo ""
-    echo -e "${YELLOW}🔑 Your encryption key: $GENERATED_KEY${NC}"
+    echo -e "${YELLOW}Your encryption key: $GENERATED_KEY${NC}"
     echo ""
-    echo -e "${RED}⚠️  IMPORTANT: This key is now saved in docker/.env${NC}"
-    echo -e "${RED}⚠️  DO NOT LOSE THIS KEY or you won't be able to decrypt your passwords!${NC}"
-    echo -e "${RED}⚠️  DO NOT CHANGE THIS KEY or existing passwords will become unreadable!${NC}"
+    echo -e "${RED}IMPORTANT: This key is now saved in docker/.env${NC}"
+    echo -e "${RED}DO NOT LOSE THIS KEY or you won't be able to decrypt your passwords!${NC}"
+    echo -e "${RED}DO NOT CHANGE THIS KEY or existing passwords will become unreadable!${NC}"
     echo ""
     read -p "Press Enter to continue..."
 else
@@ -346,11 +396,11 @@ else
 fi
 
 # Verify API key is configured
-AI_PROVIDER=$(grep "^AI_PROVIDER=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'' | sed 's/#.*//')
+AI_PROVIDER=$(get_env_value "AI_PROVIDER" "$ENV_FILE")
 
 if [ "$AI_PROVIDER" = "openrouter" ]; then
     # Check OpenRouter key
-    OPENROUTER_KEY=$(grep "^OPENROUTER_API_KEY=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'' | sed 's/#.*//')
+    OPENROUTER_KEY=$(get_env_value "OPENROUTER_API_KEY" "$ENV_FILE")
     if [ -z "$OPENROUTER_KEY" ] || echo "$OPENROUTER_KEY" | grep -q "your_openrouter_key_here"; then
         echo ""
         echo -e "${YELLOW}⚠️  Warning: OpenRouter API key not configured${NC}"
@@ -365,7 +415,7 @@ if [ "$AI_PROVIDER" = "openrouter" ]; then
     fi
 elif [ "$AI_PROVIDER" = "groq" ]; then
     # Check Groq key
-    GROQ_KEY=$(grep "^GROQ_API_KEY=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'' | sed 's/#.*//')
+    GROQ_KEY=$(get_env_value "GROQ_API_KEY" "$ENV_FILE")
     if [ -z "$GROQ_KEY" ] || echo "$GROQ_KEY" | grep -q "your_groq_key_here"; then
         echo ""
         echo -e "${YELLOW}⚠️  Warning: Groq API key not configured${NC}"

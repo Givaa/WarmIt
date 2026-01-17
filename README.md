@@ -51,6 +51,21 @@ docker logs warmit-dashboard | grep "Admin Password"
 ./warmit.sh reset     # ⚠️  Delete all data (use with caution!)
 ```
 
+### Windows Users
+
+WarmIt works on Windows with **Git Bash** (included with [Git for Windows](https://git-scm.com/download/win)):
+
+```bash
+# Open Git Bash terminal, then:
+cd /c/path/to/warmit
+bash warmit.sh start
+```
+
+**Requirements:**
+- [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows/)
+- [Git for Windows](https://git-scm.com/download/win) (includes Git Bash)
+- Python 3.11+ (for encryption key generation)
+
 ---
 
 ## ✨ What is WarmIt?
@@ -189,16 +204,14 @@ IMAP: imapmail.libero.it:993 ✓
 ## 🎯 Management
 
 ```bash
-./start.sh          # Start all services
-./start.sh restart  # Restart
-./start.sh stop     # Stop (keep data)
-./start.sh down     # Remove containers
-
-# View logs
-docker compose -f docker/docker-compose.prod.yml logs -f
-
-# Check health
-curl http://localhost:8000/health/detailed | jq
+./warmit.sh          # Start all services
+./warmit.sh restart  # Restart
+./warmit.sh stop     # Stop (keep data)
+./warmit.sh down     # Remove containers
+./warmit.sh logs     # View all logs
+./warmit.sh status   # Check service status
+./warmit.sh health   # Check API health
+./warmit.sh db-shell # Open PostgreSQL shell
 ```
 
 ---

@@ -122,11 +122,17 @@ health: ## Check system health
 shell: ## Open Python shell with project context
 	poetry run python
 
-dashboard: ## Open dashboard in browser
-	open http://localhost:8501
+dashboard: ## Open dashboard in browser (macOS/Linux/Windows)
+	@command -v open >/dev/null 2>&1 && open http://localhost:8501 || \
+	command -v xdg-open >/dev/null 2>&1 && xdg-open http://localhost:8501 || \
+	command -v start >/dev/null 2>&1 && start http://localhost:8501 || \
+	echo "Please open http://localhost:8501 in your browser"
 
-api-docs: ## Open API documentation
-	open http://localhost:8000/docs
+api-docs: ## Open API documentation (macOS/Linux/Windows)
+	@command -v open >/dev/null 2>&1 && open http://localhost:8000/docs || \
+	command -v xdg-open >/dev/null 2>&1 && xdg-open http://localhost:8000/docs || \
+	command -v start >/dev/null 2>&1 && start http://localhost:8000/docs || \
+	echo "Please open http://localhost:8000/docs in your browser"
 
 # Pre-commit
 pre-commit-install: ## Install pre-commit hooks
